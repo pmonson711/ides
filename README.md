@@ -6,13 +6,17 @@ Beware the Ides of March — find the supervisors and siblings that could kill y
 Given any PID, **ides** shows:
 
 - **Ancestors**: the chain of supervisors above the process
-- **Siblings**: all children of the same supervisor that could cause this process to be killed
+- **Siblings**: all children of the same supervisor
+- **Kill graph**: every process that could cause this PID to be killed
+- **Restart logic**: whether a terminated child will be restarted
+- **Affected siblings**: which siblings a supervisor would kill/restart if this PID dies
 
 API
 ---
 
 ```erlang
--export([ancestors/1, print/2, format/2]).
+-export([ancestors/1, format/2, print/2,
+         kill_graph/1, should_restart/2, affected_siblings/1]).
 ```
 
 ### ancestors(Pid)
@@ -38,6 +42,42 @@ Like `print/2` but returns an `iolist` instead of writing to stdout.
 
 ```erlang
 -spec format(TargetPid :: pid(), Tree :: ides:process()) -> iolist().
+```
+
+### kill_graph(Pid)
+
+Return all PIDs that could cause `Pid` to be killed. This is the set of ancestors
+(parents, grandparents, etc.) unioned with siblings that trigger cascade
+restarts under the parent's strategy.
+
+```erlang
+-spec kill_graph(TargetPid :: pid()) -> {ok, [pid()]} | {error, term()}.
+```
+
+### should_restart(Pid, ExitReason)
+
+Return whether a terminated child `Pid` would be restarted by its supervisor,
+given the exit reason (`normal` or `abnormal`).
+
+```erlang
+-type exit_reason() :: normal | abnormal.
+-spec should_restart(Pid :: pid(), Reason :: exit_reason()) -> boolean().
+```
+
+### affected_siblings(Pid)
+
+Return the PIDs of siblings that would be killed or restarted if `Pid` dies.
+This depends on the parent supervisor's strategy:
+
+| Strategy | Affected |
+|---|---|
+| `one_for_one` | `Pid` only |
+| `one_for_all` | All siblings |
+| `rest_for_one` | `Pid` and all siblings after it |
+| `simple_one_for_one` | `Pid` only |
+
+```erlang
+-spec affected_siblings(TargetPid :: pid()) -> {ok, [pid()]} | {error, term()}.
 ```
 
 ### Data types
@@ -187,6 +227,70 @@ app_sup (one_for_one)
         worker_1 (permanent)
       * worker_2 (permanent)
 ok
+```
+
+### kill_graph
+
+```
+              my_sup (one_for_one)
+              /         \
+        my_server     my_statem
+       (permanent)   (transient)
+```
+
+A process's kill graph includes ancestors plus any siblings that could
+trigger a cascade restart. Under `one_for_one`, siblings do not affect each other.
+
+```erlang
+1> {ok, Killers} = ides:kill_graph(MyStatemPid).
+2> Killers.
+[<0.55.0>]  %% only the parent supervisor
+```
+
+Under `one_for_all`, every sibling is a potential killer:
+
+```
+               my_sup (one_for_all)
+              /    |    \
+        worker_1 worker_2  cache
+       (perm)   (perm)    (temp)
+```
+
+```erlang
+1> {ok, Killers} = ides:kill_graph(Worker2Pid).
+%% Killers includes my_sup, worker_1, and cache
+```
+
+### should_restart
+
+```erlang
+1> ides:should_restart(PermanentChild, normal).  %% true
+2> ides:should_restart(TransientChild, normal).  %% false
+3> ides:should_restart(TransientChild, abnormal). %% true
+4> ides:should_restart(TemporaryChild, abnormal). %% false
+```
+
+### affected_siblings
+
+```
+              my_sup (rest_for_one)
+            /         |          \
+       startup     process     cleanup
+      (permanent) (permanent) (permanent)
+```
+
+Under `rest_for_one`, a process dying affects itself and all later siblings:
+
+```erlang
+1> {ok, Affected} = ides:affected_siblings(ProcessPid).
+%% Affected = [process_pid, cleanup_pid]
+```
+
+Under `one_for_one`, only the terminated process itself is affected:
+
+```erlang
+1> {ok, Affected} = ides:affected_siblings(StartupPid).
+%% Affected = [startup_pid]
 ```
 
 How
