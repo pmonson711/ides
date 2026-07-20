@@ -98,7 +98,9 @@ simple_one_for_one_topology_test_() ->
          ?_test(begin
              Children = supervisor:which_children(SupPid),
              ?assertEqual(2, length(Children)),
-             {_Id, TargetPid, _, _} = hd(tl(Children)),
+             [_Child1, Child2] = Children,
+             {_Id, TargetPid, _Type, _Mods} = Child2,
+             true = is_pid(TargetPid),
              {ok, Tree} = ides:ancestors(TargetPid),
              Output = lists:flatten(ides:format(TargetPid, Tree)),
              ?assert(string:find(Output, "simple_one_for_one") =/= nomatch),
@@ -122,9 +124,11 @@ run_topology(Name, Strategy, Children, TargetId, Checks) ->
      end,
      fun(SupPid) ->
          ?_test(begin
-             [{TargetId, TargetPid, _, _}] = lists:filter(
+             [Child] = lists:filter(
                  fun({Id, _, _, _}) -> Id =:= TargetId end,
                  supervisor:which_children(SupPid)),
+             {_Id, TargetPid, _Type, _Mods} = Child,
+             true = is_pid(TargetPid),
              {ok, Tree} = ides:ancestors(TargetPid),
              Output = lists:flatten(ides:format(TargetPid, Tree)),
              [Check(Output) || Check <- Checks]

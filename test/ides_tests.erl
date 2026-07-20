@@ -134,9 +134,11 @@ ancestors_one_for_one_integration_test_() ->
      end,
      fun(SupPid) ->
          ?_test(begin
-             [{worker_b, WorkerBPid, _, _}] = lists:filter(
+             [Child] = lists:filter(
                  fun({Id, _, _, _}) -> Id =:= worker_b end,
                  supervisor:which_children(SupPid)),
+             {_Id, WorkerBPid, _Type, _Mods} = Child,
+             true = is_pid(WorkerBPid),
              {ok, Tree} = ides:ancestors(WorkerBPid),
              Output = lists:flatten(ides:format(WorkerBPid, Tree)),
              [SupLine | _] = string:split(string:trim(Output, trailing), "\n", all),

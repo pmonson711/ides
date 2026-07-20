@@ -48,24 +48,26 @@ ancestors(TargetPid) ->
             {error, Reason}
     end.
 
--spec find_root_supervisor(Ancestors :: [pid() | atom()]) -> {ok, pid()} | {error, term()}.
+-spec find_root_supervisor(Ancestors :: [term()]) -> {ok, pid()} | {error, term()}.
 find_root_supervisor(Ancestors) ->
-    find_root_supervisor_loop(lists:reverse(Ancestors)).
+    do_find_root_supervisor(lists:reverse(Ancestors)).
 
-find_root_supervisor_loop([]) ->
+do_find_root_supervisor([]) ->
     {error, no_supervisor_ancestor};
-find_root_supervisor_loop([Pid | Rest]) ->
+do_find_root_supervisor([Pid | Rest]) ->
     Resolved = resolve_pid(Pid),
     case is_supervisor_ancestor(Resolved) of
         true -> {ok, Resolved};
-        false -> find_root_supervisor_loop(Rest)
+        false -> do_find_root_supervisor(Rest)
     end.
 
 -spec resolve_pid(Pid :: pid() | atom()) -> pid().
 resolve_pid(Pid) when is_atom(Pid) ->
     case whereis(Pid) of
-        undefined -> Pid;
-        P -> P
+        undefined ->
+            error({unresolved_registered_name, Pid});
+        Pid2 when is_pid(Pid2) ->
+            Pid2
     end;
 resolve_pid(Pid) ->
     Pid.
@@ -88,7 +90,7 @@ is_supervisor_ancestor(Pid) when is_pid(Pid) ->
 is_supervisor_ancestor(_) ->
     false.
 
--spec get_ancestors(Pid :: pid()) -> {ok, [pid()]} | {error, term()}.
+-spec get_ancestors(Pid :: pid()) -> {ok, [term()]} | {error, term()}.
 get_ancestors(Pid) ->
     case erlang:process_info(Pid, dictionary) of
         {dictionary, Dict} ->
@@ -104,12 +106,12 @@ get_ancestors(Pid) ->
             {error, no_dictionary}
     end.
 
--spec walk_down(RootPid :: pid(), TargetPid :: pid()) -> {ok, process()} | {error, term()}.
+-spec walk_down(RootPid :: pid() | atom(), TargetPid :: pid()) -> {ok, process()} | {error, term()}.
 walk_down(RootPid, TargetPid) when is_atom(RootPid) ->
     case whereis(RootPid) of
         undefined ->
             {error, {process_not_alive, RootPid}};
-        Pid ->
+        Pid when is_pid(Pid) ->
             walk_down(Pid, TargetPid)
     end;
 walk_down(RootPid, TargetPid) ->
@@ -131,20 +133,33 @@ walk_supervisor(SupPid, TargetPid) ->
     Name = get_name(SupPid),
     Strategy = get_strategy(SupPid),
     ChildList = supervisor:which_children(SupPid),
-    Children = [walk_child(SupPid, Child, TargetPid) || Child <- ChildList],
+    Children = lists:filtermap(fun(Child) -> walk_child_maybe(SupPid, Child, TargetPid) end, ChildList),
     #{name => Name, pid => SupPid, type => supervisor,
       strategy => Strategy, children => Children}.
 
--spec walk_child(SupPid :: pid(), {term(), pid(), worker | supervisor, [module()]}, TargetPid :: pid())
+-spec walk_child_maybe(SupPid :: pid(),
+                       {Id :: term(), Child :: pid() | undefined | restarting, worker | supervisor, term()},
+                       TargetPid :: pid())
+                      -> {true, process()} | false.
+walk_child_maybe(SupPid, {Id, ChildPid, Type, Modules}, TargetPid) when is_pid(ChildPid) ->
+    {true, walk_child(SupPid, {Id, ChildPid, Type, Modules}, TargetPid)};
+walk_child_maybe(_SupPid, {_Id, _ChildPid, _Type, _Modules}, _TargetPid) ->
+    false.
+
+-spec walk_child(SupPid :: pid(),
+                 {Id :: term(), ChildPid :: pid(), worker | supervisor, term()},
+                 TargetPid :: pid())
                -> process().
-walk_child(SupPid, {Id, ChildPid, worker, _Modules}, _TargetPid) ->
+walk_child(SupPid, {Id, ChildPid, worker, _Modules}, _TargetPid) when is_pid(ChildPid) ->
     Name = get_name(ChildPid),
     RestartType = get_restart_type(SupPid, Id),
     #{name => Name, pid => ChildPid, type => worker, restart_type => RestartType};
-walk_child(SupPid, {Id, ChildPid, supervisor, _Modules}, TargetPid) ->
+walk_child(SupPid, {Id, ChildPid, supervisor, _Modules}, TargetPid) when is_pid(ChildPid) ->
     RestartType = get_restart_type(SupPid, Id),
     ChildTree = walk_supervisor(ChildPid, TargetPid),
-    ChildTree#{restart_type => RestartType}.
+    ChildTree#{restart_type => RestartType};
+walk_child(_SupPid, {Id, _ChildPid, _Type, _Modules}, _TargetPid) ->
+    throw({unexpected_child_state, Id, _ChildPid}).
 
 -spec get_name(Pid :: pid()) -> string().
 get_name(Pid) ->
@@ -180,7 +195,7 @@ get_strategy(SupPid) ->
 strategy_from_state(State) ->
     Second = element(2, State),
     case Second of
-        {_Kind, _Name} when size(State) >= 3 ->
+        {_Kind, _Name} when tuple_size(State) >= 3 ->
             case element(3, State) of
                 S when is_atom(S) -> map_strategy(S);
                 _ -> one_for_one
@@ -234,11 +249,15 @@ format_node(TargetPid, #{name := Name, pid := Pid, type := worker,
     Anno = [" (", atom_to_list(RestartType), ")"],
     [Prefix, Name, Anno, "\n"].
 
--spec prefix(TargetPid :: pid(), Pid :: pid(), Depth :: non_neg_integer()) -> iolist().
-prefix(_TargetPid, _Pid, 0) -> "";
+-spec prefix(TargetPid :: pid(), Pid :: pid(), Depth :: non_neg_integer()) -> [string()].
+prefix(_TargetPid, _Pid, 0) -> [""];
 prefix(TargetPid, Pid, Depth) ->
-    Indent = lists:duplicate(Depth * 4 - 2, $\s),
+    Indent = spaces(Depth * 4 - 2),
     [Indent, marker(TargetPid, Pid)].
+
+-spec spaces(non_neg_integer()) -> string().
+spaces(0) -> "";
+spaces(N) -> [$\s | spaces(N - 1)].
 
 -spec marker(TargetPid :: pid(), Pid :: pid()) -> string().
 marker(TargetPid, TargetPid) -> "* ";
