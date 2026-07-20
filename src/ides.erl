@@ -74,10 +74,16 @@ resolve_pid(Pid) ->
 is_supervisor_ancestor(Pid) when Pid =:= self() ->
     false;
 is_supervisor_ancestor(Pid) when is_pid(Pid) ->
-    try gen:call(Pid, '$gen_call', which_children, 100) of
-        _ -> true
-    catch
-        _:_ -> false
+    case erlang:process_info(Pid, [initial_call, dictionary]) of
+        [{initial_call, {supervisor, _, 1}} | _] ->
+            true;
+        [{initial_call, {proc_lib, init_p, 5}}, {dictionary, Dict}] ->
+            case proplists:get_value('$initial_call', Dict) of
+                {supervisor, _, 1} -> true;
+                _ -> false
+            end;
+        _ ->
+            false
     end;
 is_supervisor_ancestor(_) ->
     false.
@@ -136,10 +142,9 @@ walk_child(SupPid, {Id, ChildPid, worker, _Modules}, _TargetPid) ->
     RestartType = get_restart_type(SupPid, Id),
     #{name => Name, pid => ChildPid, type => worker, restart_type => RestartType};
 walk_child(SupPid, {Id, ChildPid, supervisor, _Modules}, TargetPid) ->
-    Name = get_name(ChildPid),
     RestartType = get_restart_type(SupPid, Id),
     ChildTree = walk_supervisor(ChildPid, TargetPid),
-    maps:merge(ChildTree, #{name => Name, restart_type => RestartType}).
+    ChildTree#{restart_type => RestartType}.
 
 -spec get_name(Pid :: pid()) -> string().
 get_name(Pid) ->
