@@ -1,6 +1,7 @@
 -module(ides).
 
--export([ancestors/1, format/2, print/2]).
+-export([ancestors/1, format/2, print/2,
+         kill_graph/1, should_restart/2, affected_siblings/1]).
 
 -type supervisor_strategy() :: one_for_one
                              | one_for_all
@@ -10,6 +11,8 @@
 -type child_restart_type() :: permanent
                              | transient
                              | temporary.
+
+-type exit_reason() :: normal | abnormal.
 
 -type child_process() :: #{
     name         := string(),
@@ -30,7 +33,7 @@
 -type process() :: supervisor_process() | child_process().
 
 -export_type([process/0, supervisor_process/0, child_process/0,
-              supervisor_strategy/0, child_restart_type/0]).
+              supervisor_strategy/0, child_restart_type/0, exit_reason/0]).
 
 -spec ancestors(TargetPid :: pid()) -> {ok, process()} | {error, term()}.
 ancestors(TargetPid) ->
@@ -61,7 +64,9 @@ do_find_root_supervisor([Pid | Rest]) ->
         false -> do_find_root_supervisor(Rest)
     end.
 
--spec resolve_pid(Pid :: pid() | atom()) -> pid().
+-spec resolve_pid(Pid :: term()) -> pid().
+resolve_pid(Pid) when is_pid(Pid) ->
+    Pid;
 resolve_pid(Pid) when is_atom(Pid) ->
     case whereis(Pid) of
         undefined ->
@@ -70,7 +75,7 @@ resolve_pid(Pid) when is_atom(Pid) ->
             Pid2
     end;
 resolve_pid(Pid) ->
-    Pid.
+    error({not_a_pid, Pid}).
 
 -spec is_supervisor_ancestor(Pid :: pid() | atom()) -> boolean().
 is_supervisor_ancestor(Pid) when Pid =:= self() ->
@@ -266,3 +271,146 @@ marker(_TargetPid, _Pid)      -> "  ".
 -spec print(TargetPid :: pid(), Tree :: process()) -> ok.
 print(TargetPid, Tree) ->
     io:put_chars(format(TargetPid, Tree)).
+
+%% --- TLA+ properties ---
+
+-type parent_info() :: #{
+    sup_pid        := pid(),
+    sup_strategy   := supervisor_strategy(),
+    child_pids     := [{term(), pid()}],
+    target_position => pos_integer()
+}.
+
+-spec kill_graph(TargetPid :: pid()) -> {ok, [pid()]} | {error, term()}.
+kill_graph(TargetPid) ->
+    case get_ancestors(TargetPid) of
+        {ok, Ancestors} when Ancestors =/= [] ->
+            AncestorPids = lists:filtermap(
+                fun(P) ->
+                    try resolve_pid(P) of
+                        Pid -> {true, Pid}
+                    catch _:_ -> false
+                    end
+                end, Ancestors),
+            case parent_info(TargetPid) of
+                {ok, Info} ->
+                    KillerSiblings = killer_siblings(Info),
+                    {ok, ordsets:to_list(ordsets:union(
+                        ordsets:from_list(AncestorPids),
+                        ordsets:from_list(KillerSiblings)))};
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {ok, []} ->
+            {error, no_ancestors};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+-spec should_restart(Pid :: pid(), Reason :: exit_reason()) -> boolean().
+should_restart(Pid, ExitReason) ->
+    case get_ancestors(Pid) of
+        {ok, Ancestors} when Ancestors =/= [] ->
+            [Parent | _] = Ancestors,
+            ParentPid = resolve_pid(Parent),
+            ChildSpecs = supervisor:which_children(ParentPid),
+            {Id, _ChildPid, _Type, _Mods} = lists:keyfind(Pid, 2, ChildSpecs),
+            RestartType = get_restart_type(ParentPid, Id),
+            should_restart_rule(RestartType, ExitReason);
+        _ ->
+            false
+    end.
+
+-spec affected_siblings(TargetPid :: pid()) -> {ok, [pid()]} | {error, term()}.
+affected_siblings(TargetPid) ->
+    case parent_info(TargetPid) of
+        {ok, Info} ->
+            Affected = affected_siblings_rule(Info),
+            {ok, Affected};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%% --- Parent info extraction ---
+
+-spec parent_info(Pid :: pid()) -> {ok, parent_info()} | {error, term()}.
+parent_info(Pid) ->
+    case get_ancestors(Pid) of
+        {ok, Ancestors} when Ancestors =/= [] ->
+            [Parent | _] = Ancestors,
+            ParentPid = resolve_pid(Parent),
+            Strategy = get_strategy(ParentPid),
+            Children = supervisor:which_children(ParentPid),
+            ChildPids = child_pids(Children),
+            Pos = child_position(Pid, ChildPids),
+            {ok, #{
+                sup_pid => ParentPid,
+                sup_strategy => Strategy,
+                child_pids => ChildPids,
+                target_position => Pos
+            }};
+        _ ->
+            {error, no_ancestors}
+    end.
+
+-spec child_position(Pid :: pid(), Children :: [{term(), pid()}]) -> pos_integer().
+child_position(Pid, Children) ->
+    child_position(Pid, Children, 1).
+
+child_position(Pid, [{_, Pid} | _], N) -> N;
+child_position(Pid, [_ | Rest], N) -> child_position(Pid, Rest, N + 1);
+child_position(_Pid, [], _N) -> 1.
+
+-spec child_pids(Children :: [term()]) -> [{term(), pid()}].
+child_pids(Children) ->
+    [{Id, Pid} || {Id, Pid, _Type, _Mods} <- Children, is_pid(Pid)].
+
+%% --- TLA+ derived rules ---
+
+-spec killer_siblings(Info :: parent_info()) -> [pid()].
+killer_siblings(#{sup_strategy := one_for_all, child_pids := Children, target_position := _Pos}) ->
+    pids(Children);
+killer_siblings(#{sup_strategy := rest_for_one, child_pids := Children, target_position := Pos}) ->
+    pids(child_prefix(Children, Pos - 1));
+killer_siblings(#{sup_strategy := _, child_pids := _Children, target_position := _Pos}) ->
+    [].
+
+-spec should_restart_rule(RestartType :: child_restart_type(), ExitReason :: exit_reason()) -> boolean().
+should_restart_rule(permanent, _) -> true;
+should_restart_rule(transient, abnormal) -> true;
+should_restart_rule(transient, normal) -> false;
+should_restart_rule(temporary, _) -> false.
+
+-spec affected_siblings_rule(Info :: parent_info()) -> [pid()].
+affected_siblings_rule(#{sup_strategy := one_for_one, child_pids := Children, target_position := Pos}) ->
+    pids(child_sublist(Children, Pos, 1));
+affected_siblings_rule(#{sup_strategy := one_for_all, child_pids := Children, target_position := _Pos}) ->
+    pids(Children);
+affected_siblings_rule(#{sup_strategy := rest_for_one, child_pids := Children, target_position := Pos}) ->
+    pids(child_suffix(Children, Pos - 1));
+affected_siblings_rule(#{sup_strategy := simple_one_for_one, child_pids := Children, target_position := Pos}) ->
+    pids(child_sublist(Children, Pos, 1)).
+
+-spec pids(Children :: [{term(), pid()}]) -> [pid()].
+pids(Children) ->
+    [Pid || {_Id, Pid} <- Children].
+
+-spec child_sublist(Children :: [{term(), pid()}], Start :: pos_integer(), Len :: pos_integer()) -> [{term(), pid()}].
+child_sublist(Children, Start, Len) ->
+    child_sublist_skip(Children, Start - 1, Len).
+
+child_sublist_skip(Children, 0, Len) ->
+    child_prefix(Children, Len);
+child_sublist_skip([], _, _) -> [];
+child_sublist_skip([_ | T], N, Len) ->
+    child_sublist_skip(T, N - 1, Len).
+
+-spec child_prefix(Children :: [{term(), pid()}], Len :: non_neg_integer()) -> [{term(), pid()}].
+child_prefix(_Children, 0) -> [];
+child_prefix([], _) -> [];
+child_prefix([H | T], N) -> [H | child_prefix(T, N - 1)].
+
+-spec child_suffix(Children :: [{term(), pid()}], Skip :: non_neg_integer()) -> [{term(), pid()}].
+child_suffix(Children, 0) -> Children;
+child_suffix([], _) -> [];
+child_suffix([_ | T], N) -> child_suffix(T, N - 1).
