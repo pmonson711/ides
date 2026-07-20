@@ -1,0 +1,25 @@
+{application, demo, [
+    {description, "Demo app for ides supervisor inspection"},
+    {vsn, "0.1.0"},
+    {registered, [
+        demo_sup,
+        demo_db_pool,
+        demo_web_sup,
+        demo_handler_sup,
+        demo_cache,
+        demo_metrics,
+        demo_router,
+        demo_auth,
+        demo_api,
+        demo_logger
+    ]},
+    {mod, {demo, []}},
+    {applications, [
+        kernel,
+        stdlib
+    ]},
+    {env, []},
+    {modules, []},
+    {licenses, ["Apache-2.0"]},
+    {links, []}
+]}.
