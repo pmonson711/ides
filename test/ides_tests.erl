@@ -98,6 +98,16 @@ format_returns_iolist_test() ->
     ?assert(is_list(IoList) orelse is_binary(IoList)),
     ?assert(is_list(lists:flatten(IoList))).
 
+ancestors_no_proc_lib_test() ->
+    Pid = spawn(fun() -> timer:sleep(1000) end),
+    ?assertMatch({error, _}, ides:ancestors(Pid)),
+    exit(Pid, kill).
+
+ancestors_dead_process_test() ->
+    Pid = spawn(fun() -> ok end),
+    timer:sleep(10),
+    ?assertMatch({error, _}, ides:ancestors(Pid)).
+
 %% helpers: throwaway PIDs for tree construction
 p1() -> spawn(fun() -> ok end).
 p2() -> spawn(fun() -> ok end).

@@ -33,7 +33,35 @@
               supervisor_strategy/0, child_restart_type/0]).
 
 -spec ancestors(TargetPid :: pid()) -> {ok, process()} | {error, term()}.
-ancestors(_TargetPid) ->
+ancestors(TargetPid) ->
+    case get_ancestors(TargetPid) of
+        {ok, Ancestors} when Ancestors =/= [] ->
+            RootPid = lists:last(Ancestors),
+            walk_down(RootPid, TargetPid);
+        {ok, []} ->
+            {error, no_ancestors};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+-spec get_ancestors(Pid :: pid()) -> {ok, [pid()]} | {error, term()}.
+get_ancestors(Pid) ->
+    case erlang:process_info(Pid, dictionary) of
+        {dictionary, Dict} ->
+            case proplists:get_value('$ancestors', Dict) of
+                undefined ->
+                    {error, no_ancestors};
+                Ancestors when is_list(Ancestors) ->
+                    {ok, Ancestors}
+            end;
+        undefined ->
+            {error, process_not_alive};
+        _ ->
+            {error, no_dictionary}
+    end.
+
+-spec walk_down(RootPid :: pid(), TargetPid :: pid()) -> {ok, process()} | {error, term()}.
+walk_down(_RootPid, _TargetPid) ->
     {error, not_implemented}.
 
 -spec format(TargetPid :: pid(), Tree :: process()) -> iolist().
