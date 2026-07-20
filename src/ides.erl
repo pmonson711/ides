@@ -143,18 +143,23 @@ walk_child(SupPid, {Id, ChildPid, supervisor, _Modules}, TargetPid) ->
 
 -spec get_name(Pid :: pid()) -> string().
 get_name(Pid) ->
-    case proc_lib:translate_initial_call(Pid) of
-        {proc_lib, init_p, 5} ->
-            case erlang:process_info(Pid, initial_call) of
-                {initial_call, {M, F, A}} ->
+    case erlang:process_info(Pid, registered_name) of
+        {registered_name, Name} when is_atom(Name) ->
+            atom_to_list(Name);
+        _ ->
+            case proc_lib:translate_initial_call(Pid) of
+                {proc_lib, init_p, 5} ->
+                    case erlang:process_info(Pid, initial_call) of
+                        {initial_call, {M, F, A}} ->
+                            lists:flatten(io_lib:format("~s:~s/~B", [M, F, A]));
+                        _ ->
+                            pid_to_list(Pid)
+                    end;
+                {M, F, A} ->
                     lists:flatten(io_lib:format("~s:~s/~B", [M, F, A]));
-                _ ->
+                _Other ->
                     pid_to_list(Pid)
-            end;
-        {M, F, A} ->
-            lists:flatten(io_lib:format("~s:~s/~B", [M, F, A]));
-        _Other ->
-            pid_to_list(Pid)
+            end
     end.
 
 -spec get_strategy(SupPid :: pid()) -> supervisor_strategy().
@@ -192,7 +197,9 @@ map_strategy(_) ->
 -spec get_restart_type(SupPid :: pid(), Id :: term()) -> child_restart_type().
 get_restart_type(SupPid, Id) ->
     case supervisor:get_childspec(SupPid, Id) of
-        {Id, _StartFunc, RestartType, _Shutdown, _Type, _Modules} ->
+        {ok, #{restart := RestartType}} ->
+            RestartType;
+        {ok, {Id, _StartFunc, RestartType, _Shutdown, _Type, _Modules}} ->
             RestartType;
         _ ->
             permanent
