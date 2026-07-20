@@ -36,13 +36,51 @@
 ancestors(TargetPid) ->
     case get_ancestors(TargetPid) of
         {ok, Ancestors} when Ancestors =/= [] ->
-            RootPid = hd(Ancestors),
-            walk_down(RootPid, TargetPid);
+            case find_root_supervisor(Ancestors) of
+                {ok, RootPid} ->
+                    walk_down(RootPid, TargetPid);
+                {error, Reason} ->
+                    {error, Reason}
+            end;
         {ok, []} ->
             {error, no_ancestors};
         {error, Reason} ->
             {error, Reason}
     end.
+
+-spec find_root_supervisor(Ancestors :: [pid() | atom()]) -> {ok, pid()} | {error, term()}.
+find_root_supervisor(Ancestors) ->
+    find_root_supervisor_loop(lists:reverse(Ancestors)).
+
+find_root_supervisor_loop([]) ->
+    {error, no_supervisor_ancestor};
+find_root_supervisor_loop([Pid | Rest]) ->
+    Resolved = resolve_pid(Pid),
+    case is_supervisor_ancestor(Resolved) of
+        true -> {ok, Resolved};
+        false -> find_root_supervisor_loop(Rest)
+    end.
+
+-spec resolve_pid(Pid :: pid() | atom()) -> pid().
+resolve_pid(Pid) when is_atom(Pid) ->
+    case whereis(Pid) of
+        undefined -> Pid;
+        P -> P
+    end;
+resolve_pid(Pid) ->
+    Pid.
+
+-spec is_supervisor_ancestor(Pid :: pid() | atom()) -> boolean().
+is_supervisor_ancestor(Pid) when Pid =:= self() ->
+    false;
+is_supervisor_ancestor(Pid) when is_pid(Pid) ->
+    try gen:call(Pid, '$gen_call', which_children, 100) of
+        _ -> true
+    catch
+        _:_ -> false
+    end;
+is_supervisor_ancestor(_) ->
+    false.
 
 -spec get_ancestors(Pid :: pid()) -> {ok, [pid()]} | {error, term()}.
 get_ancestors(Pid) ->

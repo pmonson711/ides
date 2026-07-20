@@ -12,8 +12,10 @@ init({Strategy, Children}) ->
     {ok, {SupFlags, Children}}.
 
 start_child() ->
-    proc_lib:start_link(?MODULE, child_init, [self()]).
+    proc_lib:start_link(?MODULE, child_init, [self()], infinity, []).
 
-child_init(Parent) ->
-    proc_lib:init_ack(Parent, {ok, self()}),
-    timer:sleep(60000).
+child_init(_Parent) ->
+    proc_lib:init_ack({ok, self()}),
+    receive
+        stop -> ok
+    end.
