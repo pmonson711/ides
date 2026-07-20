@@ -19,11 +19,12 @@
 }.
 
 -type supervisor_process() :: #{
-    name     := string(),
-    pid      := pid(),
-    type     := supervisor,
-    strategy := supervisor_strategy(),
-    children := [process()]
+    name         := string(),
+    pid          := pid(),
+    type         := supervisor,
+    strategy     := supervisor_strategy(),
+    restart_type => child_restart_type(),
+    children     := [process()]
 }.
 
 -type process() :: supervisor_process() | child_process().
