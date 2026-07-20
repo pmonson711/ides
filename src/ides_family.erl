@@ -5,66 +5,90 @@
 %% --- Types ---
 
 -doc #{f => supervisor_strategy, d => "Restart strategy of a supervisor."}.
--type supervisor_strategy() :: one_for_one
-                             | one_for_all
-                             | rest_for_one
-                             | simple_one_for_one.
+-type supervisor_strategy() ::
+    one_for_one
+    | one_for_all
+    | rest_for_one
+    | simple_one_for_one.
 
 -doc #{f => child_restart_type, d => "Restart type of a child process."}.
--type child_restart_type() :: permanent
-                             | transient
-                             | temporary.
+-type child_restart_type() ::
+    permanent
+    | transient
+    | temporary.
 
--doc #{f => child_process,
-      d => "A worker (leaf) process. Includes its `restart_type` as defined\n"
-           "in the parent supervisor's child spec."}.
+-doc #{
+    f => child_process,
+    d =>
+        "A worker (leaf) process. Includes its `restart_type` as defined\n"
+        "in the parent supervisor's child spec."
+}.
 -type child_process() :: #{
-    name         := string(),
-    pid          := pid(),
-    type         := worker,
+    name := string(),
+    pid := pid(),
+    type := worker,
     restart_type := child_restart_type()
 }.
 
--doc #{f => supervisor_process,
-      d => "A supervisor process. Contains its `strategy` and ordered list\n"
-           "of `children`. When this supervisor is also a child of another\n"
-           "supervisor, `restart_type` is present."}.
+-doc #{
+    f => supervisor_process,
+    d =>
+        "A supervisor process. Contains its `strategy` and ordered list\n"
+        "of `children`. When this supervisor is also a child of another\n"
+        "supervisor, `restart_type` is present."
+}.
 -type supervisor_process() :: #{
-    name         := string(),
-    pid          := pid(),
-    type         := supervisor,
-    strategy     := supervisor_strategy(),
+    name := string(),
+    pid := pid(),
+    type := supervisor,
+    strategy := supervisor_strategy(),
     restart_type => child_restart_type(),
-    children     := [process()]
+    children := [process()]
 }.
 
 -doc #{f => process, d => "A process in the supervision tree: a supervisor or a worker."}.
 -type process() :: supervisor_process() | child_process().
 
 -type parent_info() :: #{
-    sup_pid        := pid(),
-    sup_strategy   := supervisor_strategy(),
-    child_pids     := [{term(), pid()}],
+    sup_pid := pid(),
+    sup_strategy := supervisor_strategy(),
+    child_pids := [{term(), pid()}],
     target_position => pos_integer()
 }.
 
--export_type([process/0, supervisor_process/0, child_process/0,
-              supervisor_strategy/0, child_restart_type/0, parent_info/0]).
+-export_type([
+    process/0,
+    supervisor_process/0,
+    child_process/0,
+    supervisor_strategy/0,
+    child_restart_type/0,
+    parent_info/0
+]).
 
 %% --- API ---
 
 -export([ancestors/1, get_ancestors/1, parent_info/1]).
 
 %% Internal helpers exported for sibling modules
--export([resolve_pid/1, get_name/1, get_strategy/1,
-         get_restart_type/2, child_pids/1, child_position/2]).
+-export([
+    resolve_pid/1,
+    get_name/1,
+    get_strategy/1,
+    get_restart_type/2,
+    child_pids/1,
+    child_position/2
+]).
 
 %% --- Functions ---
 
--doc #{f => ancestors, a => 1,
-      d => "Walk the supervision tree from the topmost ancestor down to\n"
-           "`TargetPid`. Returns the tree including the ancestor chain and\n"
-           "all siblings at each level."}.
+-doc #{
+    f => ancestors,
+    a => 1,
+    d =>
+        "Walk the supervision tree from the topmost ancestor down to\n"
+        "`TargetPid`. Returns the tree including the ancestor chain and\n"
+        "all siblings at each level."
+}.
 -spec ancestors(TargetPid :: pid()) -> {ok, process()} | {error, term()}.
 ancestors(TargetPid) ->
     case get_ancestors(TargetPid) of
@@ -168,23 +192,34 @@ walk_supervisor(SupPid, TargetPid) ->
     Name = get_name(SupPid),
     Strategy = get_strategy(SupPid),
     ChildList = supervisor:which_children(SupPid),
-    Children = lists:filtermap(fun(Child) -> walk_child_maybe(SupPid, Child, TargetPid) end, ChildList),
-    #{name => Name, pid => SupPid, type => supervisor,
-      strategy => Strategy, children => Children}.
+    Children = lists:filtermap(
+        fun(Child) -> walk_child_maybe(SupPid, Child, TargetPid) end, ChildList
+    ),
+    #{
+        name => Name,
+        pid => SupPid,
+        type => supervisor,
+        strategy => Strategy,
+        children => Children
+    }.
 
--spec walk_child_maybe(SupPid :: pid(),
-                       {Id :: term(), Child :: pid() | undefined | restarting, worker | supervisor, term()},
-                       TargetPid :: pid())
-                      -> {true, process()} | false.
+-spec walk_child_maybe(
+    SupPid :: pid(),
+    {Id :: term(), Child :: pid() | undefined | restarting, worker | supervisor, term()},
+    TargetPid :: pid()
+) ->
+    {true, process()} | false.
 walk_child_maybe(SupPid, {Id, ChildPid, Type, Modules}, TargetPid) when is_pid(ChildPid) ->
     {true, walk_child(SupPid, {Id, ChildPid, Type, Modules}, TargetPid)};
 walk_child_maybe(_SupPid, {_Id, _ChildPid, _Type, _Modules}, _TargetPid) ->
     false.
 
--spec walk_child(SupPid :: pid(),
-                 {Id :: term(), ChildPid :: pid(), worker | supervisor, term()},
-                 TargetPid :: pid())
-               -> process().
+-spec walk_child(
+    SupPid :: pid(),
+    {Id :: term(), ChildPid :: pid(), worker | supervisor, term()},
+    TargetPid :: pid()
+) ->
+    process().
 walk_child(SupPid, {Id, ChildPid, worker, _Modules}, _TargetPid) when is_pid(ChildPid) ->
     Name = get_name(ChildPid),
     RestartType = get_restart_type(SupPid, Id),
@@ -237,14 +272,17 @@ strategy_from_state(State) ->
             end;
         S when is_atom(S) -> map_strategy(S);
         S when is_map(S) -> one_for_one;
-        _ -> one_for_one
+        _ ->
+            one_for_one
     end.
 
 -spec map_strategy(atom()) -> supervisor_strategy().
-map_strategy(S) when S =:= one_for_one;
-                     S =:= one_for_all;
-                     S =:= rest_for_one;
-                     S =:= simple_one_for_one ->
+map_strategy(S) when
+    S =:= one_for_one;
+    S =:= one_for_all;
+    S =:= rest_for_one;
+    S =:= simple_one_for_one
+->
     S;
 map_strategy(_) ->
     one_for_one.

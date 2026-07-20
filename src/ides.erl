@@ -1,21 +1,29 @@
 -module(ides).
 
--doc "Beware the Ides of March — find the supervisors and siblings that could\n"
-     "kill your Erlang process.\n"
-     "\n"
-     "Given any PID, this module shows:\n"
-     "- **Ancestors**: the chain of supervisors above the process\n"
-     "- **Siblings**: all children of the same supervisor\n"
-     "- **Kill graph**: every process that could cause this PID to be killed\n"
-     "- **Restart logic**: whether a terminated child will be restarted\n"
-     "- **Affected siblings**: which siblings a supervisor would kill/restart\n"
-     "  if this PID dies\n"
-     "\n"
-     "Uses OTP primitives: `erlang:process_info/2` for `$ancestors`,\n"
-     "`supervisor:which_children/1`, and `proc_lib:translate_initial_call/1`.".
+-moduledoc """
+Beware the Ides of March — find the supervisors and siblings that could
+kill your Erlang process.
 
--export([ancestors/1, format/2, print/2,
-         kill_graph/1, should_restart/2, affected_siblings/1]).
+Given any PID, this module shows:
+- **Ancestors**: the chain of supervisors above the process
+- **Siblings**: all children of the same supervisor
+- **Kill graph**: every process that could cause this PID to be killed
+- **Restart logic**: whether a terminated child will be restarted
+- **Affected siblings**: which siblings a supervisor would kill/restart
+  if this PID dies
+
+Uses OTP primitives: `erlang:process_info/2` for `$ancestors`,
+`supervisor:which_children/1`, and `proc_lib:translate_initial_call/1`
+""".
+
+-export([
+    ancestors/1,
+    format/2,
+    print/2,
+    kill_graph/1,
+    should_restart/2,
+    affected_siblings/1
+]).
 
 -type supervisor_strategy() :: ides_family:supervisor_strategy().
 -type child_restart_type() :: ides_family:child_restart_type().
@@ -24,8 +32,14 @@
 -type process() :: ides_family:process().
 -type exit_reason() :: ides_march:exit_reason().
 
--export_type([process/0, supervisor_process/0, child_process/0,
-              supervisor_strategy/0, child_restart_type/0, exit_reason/0]).
+-export_type([
+    process/0,
+    supervisor_process/0,
+    child_process/0,
+    supervisor_strategy/0,
+    child_restart_type/0,
+    exit_reason/0
+]).
 
 %% --- Tree walking ---
 
