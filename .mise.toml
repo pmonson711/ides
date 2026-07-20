@@ -1,0 +1,4 @@
+[tools]
+erlang = "latest"
+"github:WhatsApp/erlang-language-platform" = "latest"
+rebar = "latest"
