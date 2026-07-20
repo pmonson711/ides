@@ -1,6 +1,9 @@
 ides
 =====
 
+> [!CAUTION]
+> This is currently in beta, and being proven out.
+
 Beware the Ides of March — find the supervisors and siblings that could kill your Erlang process.
 
 Given any PID, **ides** shows:
