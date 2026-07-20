@@ -36,7 +36,7 @@
 ancestors(TargetPid) ->
     case get_ancestors(TargetPid) of
         {ok, Ancestors} when Ancestors =/= [] ->
-            RootPid = lists:last(Ancestors),
+            RootPid = hd(Ancestors),
             walk_down(RootPid, TargetPid);
         {ok, []} ->
             {error, no_ancestors};
@@ -61,8 +61,104 @@ get_ancestors(Pid) ->
     end.
 
 -spec walk_down(RootPid :: pid(), TargetPid :: pid()) -> {ok, process()} | {error, term()}.
-walk_down(_RootPid, _TargetPid) ->
-    {error, not_implemented}.
+walk_down(RootPid, TargetPid) when is_atom(RootPid) ->
+    case whereis(RootPid) of
+        undefined ->
+            {error, {process_not_alive, RootPid}};
+        Pid ->
+            walk_down(Pid, TargetPid)
+    end;
+walk_down(RootPid, TargetPid) ->
+    case erlang:process_info(RootPid, [status]) of
+        undefined ->
+            {error, {process_not_alive, RootPid}};
+        _ ->
+            try walk_supervisor(RootPid, TargetPid) of
+                Tree -> {ok, Tree}
+            catch
+                throw:Reason -> {error, Reason};
+                error:Reason -> {error, Reason};
+                exit:Reason -> {error, {exit, Reason}}
+            end
+    end.
+
+-spec walk_supervisor(SupPid :: pid(), TargetPid :: pid()) -> process().
+walk_supervisor(SupPid, TargetPid) ->
+    Name = get_name(SupPid),
+    Strategy = get_strategy(SupPid),
+    ChildList = supervisor:which_children(SupPid),
+    Children = [walk_child(SupPid, Child, TargetPid) || Child <- ChildList],
+    #{name => Name, pid => SupPid, type => supervisor,
+      strategy => Strategy, children => Children}.
+
+-spec walk_child(SupPid :: pid(), {term(), pid(), worker | supervisor, [module()]}, TargetPid :: pid())
+               -> process().
+walk_child(SupPid, {Id, ChildPid, worker, _Modules}, _TargetPid) ->
+    Name = get_name(ChildPid),
+    RestartType = get_restart_type(SupPid, Id),
+    #{name => Name, pid => ChildPid, type => worker, restart_type => RestartType};
+walk_child(SupPid, {Id, ChildPid, supervisor, _Modules}, TargetPid) ->
+    Name = get_name(ChildPid),
+    RestartType = get_restart_type(SupPid, Id),
+    ChildTree = walk_supervisor(ChildPid, TargetPid),
+    maps:merge(ChildTree, #{name => Name, restart_type => RestartType}).
+
+-spec get_name(Pid :: pid()) -> string().
+get_name(Pid) ->
+    case proc_lib:translate_initial_call(Pid) of
+        {proc_lib, init_p, 5} ->
+            case erlang:process_info(Pid, initial_call) of
+                {initial_call, {M, F, A}} ->
+                    lists:flatten(io_lib:format("~s:~s/~B", [M, F, A]));
+                _ ->
+                    pid_to_list(Pid)
+            end;
+        {M, F, A} ->
+            lists:flatten(io_lib:format("~s:~s/~B", [M, F, A]));
+        _Other ->
+            pid_to_list(Pid)
+    end.
+
+-spec get_strategy(SupPid :: pid()) -> supervisor_strategy().
+get_strategy(SupPid) ->
+    try sys:get_state(SupPid) of
+        State when is_tuple(State) ->
+            strategy_from_state(State)
+    catch
+        _:_ -> one_for_one
+    end.
+
+-spec strategy_from_state(State :: tuple()) -> supervisor_strategy().
+strategy_from_state(State) ->
+    Second = element(2, State),
+    case Second of
+        {_Kind, _Name} when size(State) >= 3 ->
+            case element(3, State) of
+                S when is_atom(S) -> map_strategy(S);
+                _ -> one_for_one
+            end;
+        S when is_atom(S) -> map_strategy(S);
+        S when is_map(S) -> one_for_one;
+        _ -> one_for_one
+    end.
+
+-spec map_strategy(atom()) -> supervisor_strategy().
+map_strategy(S) when S =:= one_for_one;
+                     S =:= one_for_all;
+                     S =:= rest_for_one;
+                     S =:= simple_one_for_one ->
+    S;
+map_strategy(_) ->
+    one_for_one.
+
+-spec get_restart_type(SupPid :: pid(), Id :: term()) -> child_restart_type().
+get_restart_type(SupPid, Id) ->
+    case supervisor:get_childspec(SupPid, Id) of
+        {Id, _StartFunc, RestartType, _Shutdown, _Type, _Modules} ->
+            RestartType;
+        _ ->
+            permanent
+    end.
 
 -spec format(TargetPid :: pid(), Tree :: process()) -> iolist().
 format(TargetPid, Tree) ->

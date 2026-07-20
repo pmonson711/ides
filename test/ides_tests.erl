@@ -108,6 +108,44 @@ ancestors_dead_process_test() ->
     timer:sleep(10),
     ?assertMatch({error, _}, ides:ancestors(Pid)).
 
+ancestors_one_for_one_integration_test_() ->
+    {setup,
+     fun() ->
+         Children = [
+             #{id => worker_a,
+               start => {ides_test_sup, start_child, []},
+               restart => permanent,
+               shutdown => 5000,
+               type => worker,
+               modules => [ides_test_sup]},
+             #{id => worker_b,
+               start => {ides_test_sup, start_child, []},
+               restart => transient,
+               shutdown => 5000,
+               type => worker,
+               modules => [ides_test_sup]}
+         ],
+         ides_test_sup:start_link(test_o4o, one_for_one, Children)
+     end,
+     fun({ok, SupPid}) ->
+         [exit(P, kill) || {_, P, _, _} <- supervisor:which_children(SupPid)],
+         exit(SupPid, shutdown)
+     end,
+      fun({ok, SupPid}) ->
+          ?_test(begin
+              [{worker_b, WorkerBPid, _, _}] = lists:filter(
+                  fun({Id, _, _, _}) -> Id =:= worker_b end,
+                  supervisor:which_children(SupPid)),
+              {ok, Tree} = ides:ancestors(WorkerBPid),
+              Output = lists:flatten(ides:format(WorkerBPid, Tree)),
+              [SupLine | _] = string:split(string:trim(Output, trailing), "\n", all),
+              ?assert(string:find(SupLine, "one_for_one") =/= nomatch),
+              TargetLines = [L || L <- string:split(Output, "\n", all),
+                                  string:prefix(L, "  * ") =/= nomatch],
+              ?assertEqual(1, length(TargetLines))
+          end)
+      end}.
+
 %% helpers: throwaway PIDs for tree construction
 p1() -> spawn(fun() -> ok end).
 p2() -> spawn(fun() -> ok end).
