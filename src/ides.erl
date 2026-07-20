@@ -1,19 +1,38 @@
 -module(ides).
 
+%% @doc Beware the Ides of March — find the supervisors and siblings that could
+%% kill your Erlang process.
+%%
+%% Given any PID, this module shows:
+%% - **Ancestors**: the chain of supervisors above the process
+%% - **Siblings**: all children of the same supervisor
+%% - **Kill graph**: every process that could cause this PID to be killed
+%% - **Restart logic**: whether a terminated child will be restarted
+%% - **Affected siblings**: which siblings a supervisor would kill/restart if
+%%   this PID dies
+%%
+%% Uses OTP primitives: `erlang:process_info/2` for `$ancestors`,
+%% `supervisor:which_children/1`, and `proc_lib:translate_initial_call/1`.
+
 -export([ancestors/1, format/2, print/2,
          kill_graph/1, should_restart/2, affected_siblings/1]).
 
+%% @doc Restart strategy of a supervisor.
 -type supervisor_strategy() :: one_for_one
                              | one_for_all
                              | rest_for_one
                              | simple_one_for_one.
 
+%% @doc Restart type of a child process.
 -type child_restart_type() :: permanent
                              | transient
                              | temporary.
 
+%% @doc Exit reason for `should_restart/2`.
 -type exit_reason() :: normal | abnormal.
 
+%% @doc A worker (leaf) process.
+%% Includes its `restart_type` as defined in the parent supervisor's child spec.
 -type child_process() :: #{
     name         := string(),
     pid          := pid(),
@@ -21,6 +40,9 @@
     restart_type := child_restart_type()
 }.
 
+%% @doc A supervisor process. Contains its `strategy` and ordered list of
+%% `children`. When this supervisor is also a child of another supervisor,
+%% `restart_type` is present.
 -type supervisor_process() :: #{
     name         := string(),
     pid          := pid(),
@@ -30,11 +52,14 @@
     children     := [process()]
 }.
 
+%% @doc A process in the supervision tree: a supervisor or a worker.
 -type process() :: supervisor_process() | child_process().
 
 -export_type([process/0, supervisor_process/0, child_process/0,
               supervisor_strategy/0, child_restart_type/0, exit_reason/0]).
 
+%% @doc Walk the supervision tree from the topmost ancestor down to `TargetPid`.
+%% Returns the tree including the ancestor chain and all siblings at each level.
 -spec ancestors(TargetPid :: pid()) -> {ok, process()} | {error, term()}.
 ancestors(TargetPid) ->
     case get_ancestors(TargetPid) of
@@ -230,6 +255,14 @@ get_restart_type(SupPid, Id) ->
             permanent
     end.
 
+%% @doc Render the supervision tree as indented ASCII text.
+%% The target process is marked with `*`. Indentation is 4 spaces per level.
+%%
+%% Rendering rules:
+%% - Root supervisor: `name (strategy)`
+%% - Supervisor child: `name (strategy, restart_type)`
+%% - Worker child: `name (restart_type)`
+%% - Target process: prefixed with `* `
 -spec format(TargetPid :: pid(), Tree :: process()) -> iolist().
 format(TargetPid, Tree) ->
     format_node(TargetPid, Tree, 0).
@@ -268,6 +301,7 @@ spaces(N) -> [$\s | spaces(N - 1)].
 marker(TargetPid, TargetPid) -> "* ";
 marker(_TargetPid, _Pid)      -> "  ".
 
+%% @doc Like `format/2` but writes the rendered tree to stdout.
 -spec print(TargetPid :: pid(), Tree :: process()) -> ok.
 print(TargetPid, Tree) ->
     io:put_chars(format(TargetPid, Tree)).
@@ -281,6 +315,13 @@ print(TargetPid, Tree) ->
     target_position => pos_integer()
 }.
 
+%% @doc Return all PIDs that could cause `TargetPid` to be killed.
+%%
+%% This is the set of ancestors unioned with siblings that trigger cascade
+%% restarts under the parent supervisor's strategy:
+%% - `one_for_one` / `simple_one_for_one`: only ancestors (no sibling killers)
+%% - `one_for_all`: all siblings are killers
+%% - `rest_for_one`: siblings at positions before the target are killers
 -spec kill_graph(TargetPid :: pid()) -> {ok, [pid()]} | {error, term()}.
 kill_graph(TargetPid) ->
     case get_ancestors(TargetPid) of
@@ -307,6 +348,12 @@ kill_graph(TargetPid) ->
             {error, Reason}
     end.
 
+%% @doc Return whether a terminated child `Pid` would be restarted by its supervisor.
+%%
+%% Rules:
+%% - `permanent`: always restarted
+%% - `transient`: restarted only on `abnormal` exit
+%% - `temporary`: never restarted
 -spec should_restart(Pid :: pid(), Reason :: exit_reason()) -> boolean().
 should_restart(Pid, ExitReason) ->
     case get_ancestors(Pid) of
@@ -321,6 +368,14 @@ should_restart(Pid, ExitReason) ->
             false
     end.
 
+%% @doc Return the PIDs of siblings that would be killed or restarted if
+%% `TargetPid` dies.
+%%
+%% Depends on the parent supervisor's strategy:
+%% - `one_for_one`: `TargetPid` only
+%% - `one_for_all`: all siblings
+%% - `rest_for_one`: `TargetPid` and all siblings after it
+%% - `simple_one_for_one`: `TargetPid` only
 -spec affected_siblings(TargetPid :: pid()) -> {ok, [pid()]} | {error, term()}.
 affected_siblings(TargetPid) ->
     case parent_info(TargetPid) of
