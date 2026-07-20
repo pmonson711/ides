@@ -36,8 +36,38 @@ ancestors(_TargetPid) ->
     {error, not_implemented}.
 
 -spec format(TargetPid :: pid(), Tree :: process()) -> iolist().
-format(_TargetPid, _Tree) ->
-    [].
+format(TargetPid, Tree) ->
+    format_node(TargetPid, Tree, 0).
+
+-spec format_node(TargetPid :: pid(), Node :: process(), Depth :: non_neg_integer()) -> iolist().
+format_node(TargetPid, #{name := Name, pid := Pid, type := supervisor,
+                          strategy := Strategy, restart_type := RestartType,
+                          children := Children}, Depth) ->
+    Prefix = prefix(TargetPid, Pid, Depth),
+    Anno = [" (", atom_to_list(Strategy), ", ", atom_to_list(RestartType), ")"],
+    [Prefix, Name, Anno, "\n" |
+     [format_node(TargetPid, Child, Depth + 1) || Child <- Children]];
+format_node(TargetPid, #{name := Name, pid := Pid, type := supervisor,
+                          strategy := Strategy, children := Children}, Depth) ->
+    Prefix = prefix(TargetPid, Pid, Depth),
+    Anno = [" (", atom_to_list(Strategy), ")"],
+    [Prefix, Name, Anno, "\n" |
+     [format_node(TargetPid, Child, Depth + 1) || Child <- Children]];
+format_node(TargetPid, #{name := Name, pid := Pid, type := worker,
+                          restart_type := RestartType}, Depth) ->
+    Prefix = prefix(TargetPid, Pid, Depth),
+    Anno = [" (", atom_to_list(RestartType), ")"],
+    [Prefix, Name, Anno, "\n"].
+
+-spec prefix(TargetPid :: pid(), Pid :: pid(), Depth :: non_neg_integer()) -> iolist().
+prefix(_TargetPid, _Pid, 0) -> "";
+prefix(TargetPid, Pid, Depth) ->
+    Indent = lists:duplicate(Depth * 4 - 2, $\s),
+    [Indent, marker(TargetPid, Pid)].
+
+-spec marker(TargetPid :: pid(), Pid :: pid()) -> string().
+marker(TargetPid, TargetPid) -> "* ";
+marker(_TargetPid, _Pid)      -> "  ".
 
 -spec print(TargetPid :: pid(), Tree :: process()) -> ok.
 print(TargetPid, Tree) ->
