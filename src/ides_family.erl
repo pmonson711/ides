@@ -1,61 +1,7 @@
 -module(ides_family).
 
--doc "Type definitions and tree-walking primitives for ides.".
-
-%% --- Types ---
-
--doc #{f => supervisor_strategy, d => "Restart strategy of a supervisor."}.
--type supervisor_strategy() ::
-    one_for_one
-    | one_for_all
-    | rest_for_one
-    | simple_one_for_one.
-
--doc #{f => child_restart_type, d => "Restart type of a child process."}.
--type child_restart_type() ::
-    permanent
-    | transient
-    | temporary.
-
--doc #{
-    f => child_process,
-    d =>
-        "A worker (leaf) process. Includes its `restart_type` as defined\n"
-        "in the parent supervisor's child spec."
-}.
--type child_process() :: #{
-    name := string(),
-    pid := pid(),
-    type := worker,
-    restart_type := child_restart_type()
-}.
-
--doc #{
-    f => supervisor_process,
-    d =>
-        "A supervisor process. Contains its `strategy` and ordered list\n"
-        "of `children`. When this supervisor is also a child of another\n"
-        "supervisor, `restart_type` is present."
-}.
--type supervisor_process() :: #{
-    name := string(),
-    pid := pid(),
-    type := supervisor,
-    strategy := supervisor_strategy(),
-    restart_type => child_restart_type(),
-    children := [process()]
-}.
-
--doc #{f => process, d => "A process in the supervision tree: a supervisor or a worker."}.
--type process() :: supervisor_process() | child_process().
-
--type parent_info() :: #{
-    sup_pid := pid(),
-    sup_strategy := supervisor_strategy(),
-    child_pids := [{term(), pid()}],
-    target_position => pos_integer()
-}.
-
+-moduledoc "Type definitions and tree-walking primitives for ides.".
+-export([ancestors/1, get_ancestors/1, parent_info/1]).
 -export_type([
     process/0,
     supervisor_process/0,
@@ -65,30 +11,67 @@
     parent_info/0
 ]).
 
-%% --- API ---
+-doc "Restart strategy of a supervisor.".
+-type supervisor_strategy() ::
+    one_for_one
+    | one_for_all
+    | rest_for_one
+    | simple_one_for_one.
 
--export([ancestors/1, get_ancestors/1, parent_info/1]).
+-doc "Restart type of a child process.".
+-type child_restart_type() ::
+    permanent
+    | transient
+    | temporary.
+
+-doc """
+A worker (leaf) process. Includes its `restart_type` as defined
+in the parent supervisor's child spec.
+""".
+-type child_process() :: #{
+    name := string(),
+    pid := pid(),
+    type := worker,
+    restart_type := child_restart_type()
+}.
+
+-doc """
+A supervisor process. Contains its `strategy` and ordered list
+of `children`. When this supervisor is also a child of another
+supervisor, `restart_type` is present.
+""".
+-type supervisor_process() :: #{
+    name := string(),
+    pid := pid(),
+    type := supervisor,
+    strategy := supervisor_strategy(),
+    restart_type => child_restart_type(),
+    children := [process()]
+}.
+
+-doc "A process in the supervision tree: a supervisor or a worker.".
+-type process() :: supervisor_process() | child_process().
+
+-type parent_info() :: #{
+    sup_pid := pid(),
+    sup_strategy := supervisor_strategy(),
+    child_pids := [{term(), pid()}],
+    target_position => pos_integer()
+}.
 
 %% Internal helpers exported for sibling modules
 -export([
     resolve_pid/1,
-    get_name/1,
-    get_strategy/1,
-    get_restart_type/2,
-    child_pids/1,
-    child_position/2
+    get_restart_type/2
 ]).
 
 %% --- Functions ---
 
--doc #{
-    f => ancestors,
-    a => 1,
-    d =>
-        "Walk the supervision tree from the topmost ancestor down to\n"
-        "`TargetPid`. Returns the tree including the ancestor chain and\n"
-        "all siblings at each level."
-}.
+-doc """
+Walk the supervision tree from the topmost ancestor down to
+`TargetPid`. Returns the tree including the ancestor chain and
+all siblings at each level.
+""".
 -spec ancestors(TargetPid :: pid()) -> {ok, process()} | {error, term()}.
 ancestors(TargetPid) ->
     case get_ancestors(TargetPid) of

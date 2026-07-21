@@ -41,13 +41,18 @@ Uses OTP primitives: `erlang:process_info/2` for `$ancestors`,
     exit_reason/0
 ]).
 
-%% --- Tree walking ---
+-ignore_xref([
+    ancestors/1,
+    format/2,
+    print/2,
+    kill_graph/1,
+    should_restart/2,
+    affected_siblings/1
+]).
 
 -spec ancestors(TargetPid :: pid()) -> {ok, process()} | {error, term()}.
 ancestors(TargetPid) ->
     ides_family:ancestors(TargetPid).
-
-%% --- Formatting ---
 
 -spec format(TargetPid :: pid(), Tree :: process()) -> iolist().
 format(TargetPid, Tree) ->
@@ -56,8 +61,6 @@ format(TargetPid, Tree) ->
 -spec print(TargetPid :: pid(), Tree :: process()) -> ok.
 print(TargetPid, Tree) ->
     ides_printer:print(TargetPid, Tree).
-
-%% --- Kill graph analysis ---
 
 -spec kill_graph(TargetPid :: pid()) -> {ok, [pid()]} | {error, term()}.
 kill_graph(TargetPid) ->

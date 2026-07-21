@@ -1,26 +1,23 @@
 -module(ides_march).
 
--doc "Kill graph analysis and restart logic for ides.".
+-moduledoc "Kill graph analysis and restart logic for ides.".
 
 -export([kill_graph/1, should_restart/2, affected_siblings/1]).
 
 -type exit_reason() :: normal | abnormal.
 -export_type([exit_reason/0]).
 
--doc #{
-    f => kill_graph,
-    a => 1,
-    d =>
-        "Return all PIDs that could cause `TargetPid` to be killed.\n"
-        "\n"
-        "This is the set of ancestors unioned with siblings that trigger\n"
-        "cascade restarts under the parent supervisor's strategy:\n"
-        "- `one_for_one` / `simple_one_for_one`: only ancestors (no\n"
-        "  sibling killers)\n"
-        "- `one_for_all`: all siblings are killers\n"
-        "- `rest_for_one`: siblings at positions before the target are\n"
-        "  killers"
-}.
+-doc """
+Return all PIDs that could cause `TargetPid` to be killed.
+
+This is the set of ancestors unioned with siblings that trigger
+cascade restarts under the parent supervisor's strategy:
+- `one_for_one` / `simple_one_for_one`: only ancestors (no
+  sibling killers)
+- `one_for_all`: all siblings are killers
+- `rest_for_one`: siblings at positions before the target are
+  killers
+""".
 -spec kill_graph(TargetPid :: pid()) -> {ok, [pid()]} | {error, term()}.
 kill_graph(TargetPid) ->
     case ides_family:get_ancestors(TargetPid) of
@@ -54,18 +51,15 @@ kill_graph(TargetPid) ->
             {error, Reason}
     end.
 
--doc #{
-    f => should_restart,
-    a => 2,
-    d =>
-        "Return whether a terminated child `Pid` would be restarted by\n"
-        "its supervisor.\n"
-        "\n"
-        "Rules:\n"
-        "- `permanent`: always restarted\n"
-        "- `transient`: restarted only on `abnormal` exit\n"
-        "- `temporary`: never restarted"
-}.
+-doc """
+Return whether a terminated child `Pid` would be restarted by
+its supervisor.
+
+Rules:
+- `permanent`: always restarted
+- `transient`: restarted only on `abnormal` exit
+- `temporary`: never restarted
+""".
 -spec should_restart(Pid :: pid(), Reason :: exit_reason()) -> boolean().
 should_restart(Pid, ExitReason) ->
     case ides_family:get_ancestors(Pid) of
@@ -80,19 +74,16 @@ should_restart(Pid, ExitReason) ->
             false
     end.
 
--doc #{
-    f => affected_siblings,
-    a => 1,
-    d =>
-        "Return the PIDs of siblings that would be killed or restarted\n"
-        "if `TargetPid` dies.\n"
-        "\n"
-        "Depends on the parent supervisor's strategy:\n"
-        "- `one_for_one`: `TargetPid` only\n"
-        "- `one_for_all`: all siblings\n"
-        "- `rest_for_one`: `TargetPid` and all siblings after it\n"
-        "- `simple_one_for_one`: `TargetPid` only"
-}.
+-doc """
+Return the PIDs of siblings that would be killed or restarted
+if `TargetPid` dies.
+
+Depends on the parent supervisor's strategy:
+- `one_for_one`: `TargetPid` only
+- `one_for_all`: all siblings
+- `rest_for_one`: `TargetPid` and all siblings after it
+- `simple_one_for_one`: `TargetPid` only
+""".
 -spec affected_siblings(TargetPid :: pid()) -> {ok, [pid()]} | {error, term()}.
 affected_siblings(TargetPid) ->
     case ides_family:parent_info(TargetPid) of
@@ -102,8 +93,6 @@ affected_siblings(TargetPid) ->
         {error, Reason} ->
             {error, Reason}
     end.
-
-%% --- Internal ---
 
 -spec killer_siblings(Info :: ides_family:parent_info()) -> [pid()].
 killer_siblings(#{sup_strategy := one_for_all, child_pids := Children, target_position := _Pos}) ->

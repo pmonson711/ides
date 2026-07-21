@@ -1,23 +1,20 @@
 -module(ides_printer).
 
--doc "Formatting and rendering for ides supervision trees.".
+-moduledoc "Formatting and rendering for ides supervision trees.".
 
 -export([format/2, print/2]).
 
--doc #{
-    f => format,
-    a => 2,
-    d =>
-        "Render the supervision tree as indented ASCII text.\n"
-        "The target process is marked with `*`. Indentation is 4 spaces\n"
-        "per level.\n"
-        "\n"
-        "Rendering rules:\n"
-        "- Root supervisor: `name (strategy)`\n"
-        "- Supervisor child: `name (strategy, restart_type)`\n"
-        "- Worker child: `name (restart_type)`\n"
-        "- Target process: prefixed with `* `"
-}.
+-doc """
+Render the supervision tree as indented ASCII text.
+The target process is marked with `*`. Indentation is 4 spaces
+per level.
+
+Rendering rules:
+- Root supervisor: `name (strategy)`
+- Supervisor child: `name (strategy, restart_type)`
+- Worker child: `name (restart_type)`
+- Target process: prefixed with `* `
+""".
 -spec format(TargetPid :: pid(), Tree :: ides_family:process()) -> iolist().
 format(TargetPid, Tree) ->
     format_node(TargetPid, Tree, 0).
@@ -94,11 +91,9 @@ spaces(N) -> [$\s | spaces(N - 1)].
 marker(TargetPid, TargetPid) -> "* ";
 marker(_TargetPid, _Pid) -> "  ".
 
--doc #{
-    f => print,
-    a => 2,
-    d => "Like `format/2` but writes the rendered tree to stdout."
-}.
+-doc """
+Like `format/2` but writes the rendered tree to stdout.
+""".
 -spec print(TargetPid :: pid(), Tree :: ides_family:process()) -> ok.
 print(TargetPid, Tree) ->
     io:put_chars(format(TargetPid, Tree)).
