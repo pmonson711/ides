@@ -45,15 +45,11 @@ kill_graph(TargetPid) ->
                     LinkKillers = link_killers(TargetPid),
                     MonitorKillers = monitor_killers(TargetPid),
                     {ok,
-                        ordsets:to_list(
-                            ordsets:union(
-                                [
-                                    ordsets:from_list(AncestorPids),
-                                    ordsets:from_list(KillerSiblings),
-                                    ordsets:from_list(LinkKillers),
-                                    ordsets:from_list(MonitorKillers)
-                                ]
-                            )
+                        lists:usort(
+                            AncestorPids ++
+                                KillerSiblings ++
+                                LinkKillers ++
+                                MonitorKillers
                         )};
                 {error, Reason} ->
                     {error, Reason}
