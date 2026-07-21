@@ -12,6 +12,7 @@ exports_test() ->
         {format, 2},
         {format_detail, 3},
         {format_init_analysis, 1},
+        {init_analysis, 1},
         {kill_graph, 1},
         {kill_graph_detail, 1},
         {link_info, 1},

@@ -227,7 +227,7 @@ Return init analysis for the parent supervisor of `Pid`.
 Walks the parent supervisor's children and computes a worst-case
 init failure assessment: how many children could fail init before
 exhausting the supervisor's restart intensity budget.
-""" .
+""".
 -spec init_analysis(Pid :: pid()) ->
     {ok, ides_family:init_analysis_result()} | {error, term()}.
 init_analysis(Pid) ->
@@ -235,13 +235,15 @@ init_analysis(Pid) ->
         {ok, #{sup_pid := SupPid, sup_strategy := Strategy, child_pids := ChildPids}} ->
             Children = build_children(SupPid, ChildPids),
             IntensityResult = intensity_info(SupPid),
-            Intensity = case IntensityResult of
-                {ok, Info} -> Info;
-                _ -> #{max_restarts => 1, max_period => 5}
-            end,
+            Intensity =
+                case IntensityResult of
+                    {ok, Info} -> Info;
+                    _ -> #{max_restarts => 1, max_period => 5}
+                end,
             WorstCase = length([1 || #{counts_against_intensity := true} <- Children]),
-            Budget = maps:get(max_restarts, Intensity) -
-                maps:get(current_count, Intensity, 0),
+            Budget =
+                maps:get(max_restarts, Intensity) -
+                    maps:get(current_count, Intensity, 0),
             {ok, #{
                 supervisor => SupPid,
                 sup_strategy => Strategy,
@@ -268,11 +270,12 @@ build_children(SupPid, ChildPids) ->
 build_child_init_info(SupPid, Id, Pid, RawChildren) ->
     RestartType = ides_family:get_restart_type(SupPid, Id),
     Shutdown = get_shutdown(SupPid, Id),
-    Phase = case lists:keyfind(Id, 1, RawChildren) of
-        {Id, Pid, _Type, _Mods} when is_pid(Pid) -> running;
-        {Id, restarting, _Type, _Mods} -> restarting;
-        _ -> undefined
-    end,
+    Phase =
+        case lists:keyfind(Id, 1, RawChildren) of
+            {Id, Pid, _Type, _Mods} when is_pid(Pid) -> running;
+            {Id, restarting, _Type, _Mods} -> restarting;
+            _ -> undefined
+        end,
     Counts = counts_against_intensity(RestartType),
     #{
         id => Id,

@@ -29,6 +29,7 @@ Uses OTP primitives: `erlang:process_info/2` for `$ancestors`,
     format_detail/3,
     print_detail/3,
     intensity_info/1,
+    init_analysis/1,
     format_init_analysis/1,
     print_init_analysis/1
 ]).
@@ -104,6 +105,11 @@ print_detail(TargetPid, Tree, KillSources) ->
 -spec intensity_info(SupPid :: pid()) -> {ok, intensity_info()} | {error, term()}.
 intensity_info(SupPid) ->
     ides_march:intensity_info(SupPid).
+
+-spec init_analysis(TargetPid :: pid()) ->
+    {ok, ides_family:init_analysis_result()} | {error, term()}.
+init_analysis(TargetPid) ->
+    ides_march:init_analysis(TargetPid).
 
 -spec format_init_analysis(Result :: ides_family:init_analysis_result()) -> iolist().
 format_init_analysis(Result) ->

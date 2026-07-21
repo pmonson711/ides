@@ -2,7 +2,14 @@
 
 -moduledoc "Formatting and rendering for ides supervision trees.".
 
--export([format/2, print/2, format_detail/3, print_detail/3, format_init_analysis/1, print_init_analysis/1]).
+-export([
+    format/2,
+    print/2,
+    format_detail/3,
+    print_detail/3,
+    format_init_analysis/1,
+    print_init_analysis/1
+]).
 
 -doc """
 Render the supervision tree as indented ASCII text.
@@ -139,7 +146,7 @@ print_detail(TargetPid, Tree, KillSources) ->
 
 -doc """
 Render the init analysis result as a human-readable summary.
-""" .
+""".
 -spec format_init_analysis(Result :: ides_family:init_analysis_result()) -> iolist().
 format_init_analysis(#{
     supervisor := SupPid,
@@ -166,63 +173,82 @@ format_init_analysis(#{
 
 -doc """
 Like `format_init_analysis/1` but writes to stdout.
-""" .
+""".
 -spec print_init_analysis(Result :: ides_family:init_analysis_result()) -> ok.
 print_init_analysis(Result) ->
     io:put_chars(format_init_analysis(Result)).
 
 %% --- Internal helpers for init_analysis formatting ---
 
--spec format_sup_header(SupPid :: pid(), Strategy :: atom(), Intensity :: ides_family:intensity_info()) ->
+-spec format_sup_header(
+    SupPid :: pid(), Strategy :: atom(), Intensity :: ides_family:intensity_info()
+) ->
     iolist().
 format_sup_header(SupPid, Strategy, Intensity) ->
     SupName = pid_to_list(SupPid),
     case Intensity of
         #{max_restarts := MaxR, max_period := MaxT, current_count := Count} ->
             Remaining = max(0, MaxR - Count),
-            io_lib:format("Supervisor: ~s (~s, max ~p/~ps, ~p restarts remaining)~n",
-                [SupName, atom_to_list(Strategy), MaxR, MaxT, Remaining]);
+            io_lib:format(
+                "Supervisor: ~s (~s, max ~p/~ps, ~p restarts remaining)~n",
+                [SupName, atom_to_list(Strategy), MaxR, MaxT, Remaining]
+            );
         #{max_restarts := MaxR, max_period := MaxT} ->
-            io_lib:format("Supervisor: ~s (~s, max ~p/~ps)~n",
-                [SupName, atom_to_list(Strategy), MaxR, MaxT])
+            io_lib:format(
+                "Supervisor: ~s (~s, max ~p/~ps)~n",
+                [SupName, atom_to_list(Strategy), MaxR, MaxT]
+            )
     end.
 
 -spec format_child_info(Info :: ides_family:child_init_info(), TargetPid :: pid()) -> iolist().
-format_child_info(#{
-    id := Id,
-    pid := Pid,
-    restart_type := RestartType,
-    shutdown := Shutdown,
-    counts_against_intensity := Counts
-}, TargetPid) ->
-    Marker = case Pid of
-        TargetPid -> "* ";
-        _ -> "  "
-    end,
+format_child_info(
+    #{
+        id := Id,
+        pid := Pid,
+        restart_type := RestartType,
+        shutdown := Shutdown,
+        counts_against_intensity := Counts
+    },
+    TargetPid
+) ->
+    Marker =
+        case Pid of
+            TargetPid -> "* ";
+            _ -> "  "
+        end,
     IdStr = io_lib:format("~p", [Id]),
-    ShutdownStr = case Shutdown of
-        infinity -> "infinity";
-        Ms when is_integer(Ms) -> io_lib:format("~p", [Ms])
-    end,
-    Anno = case {Counts, RestartType} of
-        {false, _} ->
-            io_lib:format("(~s, shutdown=~s)    never restarted", [atom_to_list(RestartType), ShutdownStr]);
-        _ ->
-            io_lib:format("(~s, shutdown=~s)", [atom_to_list(RestartType), ShutdownStr])
-    end,
+    ShutdownStr =
+        case Shutdown of
+            infinity -> "infinity";
+            Ms when is_integer(Ms) -> io_lib:format("~p", [Ms])
+        end,
+    Anno =
+        case {Counts, RestartType} of
+            {false, _} ->
+                io_lib:format("(~s, shutdown=~s)    never restarted", [
+                    atom_to_list(RestartType), ShutdownStr
+                ]);
+            _ ->
+                io_lib:format("(~s, shutdown=~s)", [atom_to_list(RestartType), ShutdownStr])
+        end,
     ["    ", Marker, IdStr, "  ", Anno].
 
 -spec format_budget_footer(Budget :: integer(), WorstCase :: non_neg_integer()) -> iolist().
 format_budget_footer(Budget, WorstCase) when Budget < 0 ->
-    io_lib:format("Remaining budget: exceeded by ~p. Worst case: ~p.~n",
-        [abs(Budget), WorstCase]);
+    io_lib:format(
+        "Remaining budget: exceeded by ~p. Worst case: ~p.~n",
+        [abs(Budget), WorstCase]
+    );
 format_budget_footer(Budget, WorstCase) when Budget < WorstCase ->
     io_lib:format(
         "Remaining budget: ~p. Worst case: ~p. WARNING: worst-case restarts (~p) exceeds remaining budget (~p).~n",
-        [Budget, WorstCase, WorstCase, Budget]);
+        [Budget, WorstCase, WorstCase, Budget]
+    );
 format_budget_footer(Budget, WorstCase) ->
-    io_lib:format("Remaining budget: ~p. Worst case: ~p.~n",
-        [Budget, WorstCase]).
+    io_lib:format(
+        "Remaining budget: ~p. Worst case: ~p.~n",
+        [Budget, WorstCase]
+    ).
 
 %% --- Internal ---
 
