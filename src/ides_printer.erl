@@ -241,7 +241,8 @@ format_budget_footer(Budget, WorstCase) when Budget < 0 ->
     );
 format_budget_footer(Budget, WorstCase) when Budget < WorstCase ->
     io_lib:format(
-        "Remaining budget: ~p. Worst case: ~p. WARNING: worst-case restarts (~p) exceeds remaining budget (~p).~n",
+        "Remaining budget: ~p. Worst case: ~p. "
+        "WARNING: worst-case (~p) exceeds remaining budget (~p).~n",
         [Budget, WorstCase, WorstCase, Budget]
     );
 format_budget_footer(Budget, WorstCase) ->
