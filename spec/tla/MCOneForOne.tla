@@ -21,4 +21,6 @@ INSTANCE SupervisorModel WITH
   TrapsExits  <- [p \in {"root", "child1", "child2"} |-> FALSE],
   HandlesDown <- [p \in {"root", "child1", "child2"} |-> FALSE]
 ASSUME KillGraphDeep
+\* Exercises: OneForOne strategy, restart-type correctness
+\* (permanent vs transient), restart intensity within a flat tree.
 ====

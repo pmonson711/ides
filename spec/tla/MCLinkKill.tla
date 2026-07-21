@@ -23,4 +23,7 @@ INSTANCE SupervisorModel WITH
   TrapsExits  <- [x \in {"root", "sup", "p1", "p2", "p3"} |-> CASE x = "p1" -> TRUE [] OTHER -> FALSE],
   HandlesDown <- [x \in {"root", "sup", "p1", "p2", "p3"} |-> FALSE]
 ASSUME KillGraphDeep
+\* Exercises: Link propagation — partially linked workers
+\* (p1 traps exits, p2 and p3 don't).  Verifies LinkPropagationCorrect
+\* and that KillGraph includes LinkKillersOf for non-trapping processes.
 ====

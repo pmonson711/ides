@@ -44,4 +44,6 @@ INSTANCE SupervisorModel WITH
   TrapsExits  <- [p \in {"root", "supA", "supB", "worker1", "worker2", "worker3"} |-> FALSE],
   HandlesDown <- [p \in {"root", "supA", "supB", "worker1", "worker2", "worker3"} |-> FALSE]
 ASSUME KillGraphDeep
+\* Exercises: 3-level nested tree with mixed strategies (rest_for_one
+\* under one_for_all), deep cascade and escalation across levels.
 ====

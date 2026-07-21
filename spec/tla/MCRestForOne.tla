@@ -21,4 +21,6 @@ INSTANCE SupervisorModel WITH
   TrapsExits  <- [p \in {"root", "child1", "child2", "child3"} |-> FALSE],
   HandlesDown <- [p \in {"root", "child1", "child2", "child3"} |-> FALSE]
 ASSUME KillGraphDeep
+\* Exercises: RestForOne strategy (ordered cascade — child at index i
+\* kills children i..N), restart intensity, all-permanent children.
 ====

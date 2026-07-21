@@ -22,4 +22,7 @@ INSTANCE SupervisorModel WITH
   TrapsExits  <- [x \in {"root", "sup", "m1", "m2", "m3"} |-> FALSE],
   HandlesDown <- [x \in {"root", "sup", "m1", "m2", "m3"} |-> CASE x = "m1" -> TRUE [] OTHER -> FALSE]
 ASSUME KillGraphDeep
+\* Exercises: Monitor/DOWN propagation — chain of monitored processes
+\* (m1 handles DOWN, m2 doesn't).  Verifies MonitorCrashInKillGraph
+\* and that KillGraph includes MonitorKillersOf for non-handling processes.
 ====
