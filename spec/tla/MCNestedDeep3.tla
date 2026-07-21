@@ -43,4 +43,5 @@ INSTANCE SupervisorModel WITH
   Monitors    <- [p \in {"root", "supA", "supB", "worker1", "worker2", "worker3"} |-> {}],
   TrapsExits  <- [p \in {"root", "supA", "supB", "worker1", "worker2", "worker3"} |-> FALSE],
   HandlesDown <- [p \in {"root", "supA", "supB", "worker1", "worker2", "worker3"} |-> FALSE]
+ASSUME KillGraphDeep
 ====

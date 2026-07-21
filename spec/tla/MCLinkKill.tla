@@ -22,4 +22,5 @@ INSTANCE SupervisorModel WITH
   Monitors    <- [x \in {"root", "sup", "p1", "p2", "p3"} |-> {}],
   TrapsExits  <- [x \in {"root", "sup", "p1", "p2", "p3"} |-> CASE x = "p1" -> TRUE [] OTHER -> FALSE],
   HandlesDown <- [x \in {"root", "sup", "p1", "p2", "p3"} |-> FALSE]
+ASSUME KillGraphDeep
 ====
