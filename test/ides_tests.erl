@@ -529,6 +529,88 @@ intensity_info_dead_process_test() ->
     ?assertEqual(1, maps:get(max_restarts, Info)),
     ?assertEqual(5, maps:get(max_period, Info)).
 
+init_analysis_format_test() ->
+    TargetPid = spawn(fun() -> ok end),
+    SupPid = spawn(fun() -> ok end),
+    Result = #{
+        supervisor => SupPid,
+        sup_strategy => one_for_one,
+        sup_intensity => #{max_restarts => 3, max_period => 5, current_count => 1, remaining => 2},
+        target_pid => TargetPid,
+        total_children => 4,
+        worst_case_restarts => 3,
+        remaining_budget => 2,
+        children => [
+            #{
+                id => worker_a,
+                pid => spawn(fun() -> ok end),
+                restart_type => permanent,
+                shutdown => 5000,
+                phase => running,
+                counts_against_intensity => true
+            },
+            #{
+                id => worker_b,
+                pid => spawn(fun() -> ok end),
+                restart_type => transient,
+                shutdown => 5000,
+                phase => running,
+                counts_against_intensity => true
+            },
+            #{
+                id => worker_c,
+                pid => TargetPid,
+                restart_type => transient,
+                shutdown => infinity,
+                phase => running,
+                counts_against_intensity => true
+            },
+            #{
+                id => worker_d,
+                pid => spawn(fun() -> ok end),
+                restart_type => temporary,
+                shutdown => 5000,
+                phase => running,
+                counts_against_intensity => false
+            }
+        ]
+    },
+    Output = lists:flatten(ides:format_init_analysis(Result)),
+    ?assert(string:find(Output, "Supervisor:") =/= nomatch),
+    ?assert(string:find(Output, "one_for_one") =/= nomatch),
+    ?assert(string:find(Output, "Total children: 4") =/= nomatch),
+    ?assert(string:find(Output, "Worst-case restart count: 3") =/= nomatch),
+    ?assert(string:find(Output, "worker_a") =/= nomatch),
+    ?assert(string:find(Output, "worker_b") =/= nomatch),
+    ?assert(string:find(Output, "worker_c") =/= nomatch),
+    ?assert(string:find(Output, "worker_d") =/= nomatch),
+    ?assert(string:find(Output, "permanent") =/= nomatch),
+    ?assert(string:find(Output, "transient") =/= nomatch),
+    ?assert(string:find(Output, "temporary") =/= nomatch),
+    ?assert(string:find(Output, "never restarted") =/= nomatch),
+    ?assert(string:find(Output, "shutdown=5000") =/= nomatch),
+    ?assert(string:find(Output, "shutdown=infinity") =/= nomatch),
+    ?assert(string:find(Output, "Remaining budget:") =/= nomatch),
+    ?assert(string:find(Output, "WARNING") =/= nomatch).
+
+init_analysis_format_no_children_test() ->
+    SupPid = spawn(fun() -> ok end),
+    TargetPid = spawn(fun() -> ok end),
+    Result = #{
+        supervisor => SupPid,
+        sup_strategy => one_for_one,
+        sup_intensity => #{max_restarts => 1, max_period => 5},
+        target_pid => TargetPid,
+        total_children => 0,
+        worst_case_restarts => 0,
+        remaining_budget => 1,
+        children => []
+    },
+    Output = lists:flatten(ides:format_init_analysis(Result)),
+    ?assert(string:find(Output, "Total children: 0") =/= nomatch),
+    ?assert(string:find(Output, "Worst-case restart count: 0") =/= nomatch),
+    ?assert(string:find(Output, "Remaining budget:") =/= nomatch).
+
 %% helpers: throwaway PIDs for tree construction
 p1() -> spawn(fun() -> ok end).
 p2() -> spawn(fun() -> ok end).
