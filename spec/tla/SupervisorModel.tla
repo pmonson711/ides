@@ -73,10 +73,10 @@ AbnormalTermination(p) ==
   /\ LET link_victims == {q \in Links[p] : q /= p /\ ~TrapsExits[q]
                                 /\ proc_state[q].state = Running}
      IN /\ proc_state' = [q \in Processes |->
-             CASE q = p ->
-               [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[q].type]
-             [] q \in link_victims ->
-               [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[q].type]
+              CASE q = p ->
+                [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[q].type, init_phase |-> proc_state[q].init_phase]
+              [] q \in link_victims ->
+                [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[q].type, init_phase |-> proc_state[q].init_phase]
              [] OTHER -> proc_state[q]]
   /\ history' = [action |-> "AbnormalTermination", pid |-> p]
   /\ clock' = clock
@@ -90,11 +90,11 @@ LinkKill(p) ==
   /\ LET victims == {q \in Links[p] : q /= p /\ ~TrapsExits[q]
                            /\ proc_state[q].state = Running}
      IN /\ victims # {}
-        /\ proc_state' = [q \in Processes |->
-             CASE q \in victims ->
-               [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[q].type]
-             [] OTHER -> proc_state[q]]
-        /\ history' = [action |-> "LinkKill", pid |-> p]
+         /\ proc_state' = [q \in Processes |->
+              CASE q \in victims ->
+                [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[q].type, init_phase |-> proc_state[q].init_phase]
+              [] OTHER -> proc_state[q]]
+         /\ history' = [action |-> "LinkKill", pid |-> p]
         /\ clock' = clock
         /\ UNCHANGED <<restart_window, monitor_down>>
 
@@ -106,11 +106,11 @@ MonitorCrash(p) ==
                            /\ ~HandlesDown[q]
                            /\ proc_state[q].state = Running}
      IN /\ victims # {}
-        /\ proc_state' = [q \in Processes |->
-             CASE q \in victims ->
-               [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[q].type]
-             [] OTHER -> proc_state[q]]
-        /\ history' = [action |-> "MonitorCrash", pid |-> p]
+         /\ proc_state' = [q \in Processes |->
+              CASE q \in victims ->
+                [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[q].type, init_phase |-> proc_state[q].init_phase]
+              [] OTHER -> proc_state[q]]
+         /\ history' = [action |-> "MonitorCrash", pid |-> p]
         /\ clock' = clock
         /\ UNCHANGED <<restart_window, monitor_down>>
 
@@ -130,8 +130,8 @@ SupervisorReacts(sup) ==
               THEN \* Restart intensity exceeded: supervisor terminates all children and itself
                    /\ restart_window' = restart_window
                    /\ proc_state' = [p \in Processes |->
-                        CASE p = sup \/ p \in children_set ->
-                          [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[p].type]
+                         CASE p = sup \/ p \in children_set ->
+                           [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[p].type, init_phase |-> proc_state[p].init_phase]
                         [] OTHER -> proc_state[p]]
               ELSE \* Restart eligible children, kill newly affected, leave others
                    /\ restart_window' = [restart_window EXCEPT ![sup] =
@@ -139,10 +139,10 @@ SupervisorReacts(sup) ==
                             entries == [t \in 1..count |-> clock]
                         IN restart_window[sup] \o entries]
                    /\ proc_state' = [p \in Processes |->
-                        CASE p \in to_restart ->
-                          [state |-> Running, exit |-> Normal, type |-> proc_state[p].type]
-                        [] p \in newly_killed ->
-                          [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[p].type]
+                         CASE p \in to_restart ->
+                           [state |-> Running, exit |-> Normal, type |-> proc_state[p].type, init_phase |-> Running]
+                         [] p \in newly_killed ->
+                           [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[p].type, init_phase |-> proc_state[p].init_phase]
                         [] OTHER -> proc_state[p]]
 
 Next ==
