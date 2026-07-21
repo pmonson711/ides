@@ -34,6 +34,13 @@ WorkerType     == "worker"
 
 ProcTypes == {SupervisorType, WorkerType}
 
+\* Init phases
+Idle          == "idle"
+Initing       == "initing"
+InitTimedOut  == "init_timed_out"
+
+InitPhases == {Idle, Initing, Running, InitTimedOut}
+
 \* Constants — values supplied by TLC config
 CONSTANTS Processes, Root, ChildrenOf, Strategy, RestartType, MaxR, MaxT, MaxClock, Links, Monitors, TrapsExits, HandlesDown
 
