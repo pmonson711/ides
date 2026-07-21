@@ -14,6 +14,27 @@ Given any PID, **ides** shows:
 - **Restart logic**: whether a terminated child will be restarted
 - **Affected siblings**: which siblings a supervisor would kill/restart if this PID dies
 
+Why ides?
+----------
+
+> "Why not just kill the PID and see what breaks?"
+
+Killing a process to observe the blast radius is destructive, reactive, and incomplete:
+
+| Kill-a-PID approach | ides |
+|---|---|
+| Destructive — actually crashes processes, potentially in production | Read-only — uses OTP introspection primitives, zero side effects |
+| Reactive — you learn what happened *after* the damage is done | Predictive — you understand what *will* happen before anything dies |
+| Tells you what died (the blast radius) | Tells you what died, *plus* who can kill you (ancestors + killer siblings) |
+| Observes effects without explaining the cause | Shows supervisor strategy, restart types, and child position — the *why* behind the outcome |
+| No insight into restart behavior — did it come back because it's `permanent`, or was it `temporary`? | Explicitly answers `should_restart/2` based on the child's restart type |
+| May leave the system in an unknown state with cascading side effects | Pure analysis — the system stays exactly as it was |
+| Hard to test — must account for restart intensity, timing, and supervisor state; often requires custom test scaffolding | Works out of the box on any OTP process, no test setup needed |
+
+In complex supervision trees with nested `one_for_all`, `rest_for_one`, and
+escalation boundaries, reasoning about failure domains by hand is error-prone.
+ides answers these questions at runtime without a single process crash.
+
 API documentation is generated from source via `rebar3 ex_doc`. See `src/ides.erl`.
 
 Examples
