@@ -10,8 +10,13 @@ exports_test() ->
         {affected_siblings, 1},
         {ancestors, 1},
         {format, 2},
+        {format_detail, 3},
         {kill_graph, 1},
+        {kill_graph_detail, 1},
+        {link_info, 1},
+        {monitor_info, 1},
         {print, 2},
+        {print_detail, 3},
         {should_restart, 2}
     ],
     Exports = [E || {Name, _} = E <- ides:module_info(exports), Name =/= module_info],
@@ -404,6 +409,86 @@ affected_siblings_one_for_all_integration_test_() ->
                 ?assertEqual(2, length(Aff)),
                 ?assert(lists:member(PA, Aff)),
                 ?assert(lists:member(PB, Aff))
+            end)
+        end}.
+
+%% --- Link and monitor tests ---
+
+link_info_alive_self_test() ->
+    {ok, #{links := Links, traps_exits := Traps}} = ides:link_info(self()),
+    ?assert(is_list(Links)),
+    ?assertNot(lists:member(self(), Links)),
+    ?assert(is_boolean(Traps)).
+
+link_info_dead_process_test() ->
+    Pid = spawn(fun() -> ok end),
+    timer:sleep(10),
+    ?assertMatch({error, _}, ides:link_info(Pid)).
+
+monitor_info_alive_self_test() ->
+    {ok, #{monitors := Monitors, monitored_by := MonitoredBy}} = ides:monitor_info(self()),
+    ?assert(is_list(Monitors)),
+    ?assert(is_list(MonitoredBy)).
+
+monitor_info_dead_process_test() ->
+    Pid = spawn(fun() -> ok end),
+    timer:sleep(10),
+    ?assertMatch({error, _}, ides:monitor_info(Pid)).
+
+kill_graph_detail_test_() ->
+    {setup,
+        fun() ->
+            Children = [
+                #{
+                    id => child1,
+                    start => {ides_test_sup, start_child, []},
+                    restart => permanent,
+                    shutdown => 5000,
+                    type => worker,
+                    modules => [ides_test_sup]
+                }
+            ],
+            {ok, SupPid} = ides_test_sup:start_link(test_kgd, one_for_one, Children),
+            unlink(SupPid),
+            SupPid
+        end,
+        fun(SupPid) -> exit(SupPid, shutdown) end, fun(SupPid) ->
+            ?_test(begin
+                ChildList = supervisor:which_children(SupPid),
+                {child1, ChildPid, _, _} = lists:keyfind(child1, 1, ChildList),
+                {ok, Sources} = ides:kill_graph_detail(ChildPid),
+                ?assert(is_list(Sources)),
+                HasAncestor = lists:any(fun({ancestor, P}) -> P =:= SupPid end, Sources),
+                ?assert(HasAncestor)
+            end)
+        end}.
+
+kill_graph_includes_links_test_() ->
+    {setup,
+        fun() ->
+            Children = [
+                #{
+                    id => child_a,
+                    start => {ides_test_sup, start_child, []},
+                    restart => permanent,
+                    shutdown => 5000,
+                    type => worker,
+                    modules => [ides_test_sup]
+                }
+            ],
+            {ok, SupPid} = ides_test_sup:start_link(test_kgl, one_for_one, Children),
+            unlink(SupPid),
+            SupPid
+        end,
+        fun(SupPid) -> exit(SupPid, shutdown) end, fun(SupPid) ->
+            ?_test(begin
+                ChildList = supervisor:which_children(SupPid),
+                {child_a, ChildPid, _, _} = lists:keyfind(child_a, 1, ChildList),
+                {ok, KG} = ides:kill_graph(ChildPid),
+                ?assert(lists:member(SupPid, KG)),
+                {ok, #{links := Links, traps_exits := Traps}} = ides:link_info(ChildPid),
+                ?assert(is_list(Links)),
+                ?assert(is_boolean(Traps))
             end)
         end}.
 

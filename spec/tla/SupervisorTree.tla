@@ -35,7 +35,7 @@ WorkerType     == "worker"
 ProcTypes == {SupervisorType, WorkerType}
 
 \* Constants — values supplied by TLC config
-CONSTANTS Processes, Root, ChildrenOf, Strategy, RestartType, MaxR, MaxT, MaxClock
+CONSTANTS Processes, Root, ChildrenOf, Strategy, RestartType, MaxR, MaxT, MaxClock, Links, Monitors, TrapsExits, HandlesDown
 
 ASSUME Root \in Processes
 ASSUME ChildrenOf \in [Processes -> Seq(Processes)]
@@ -44,6 +44,11 @@ ASSUME RestartType \in [Processes -> RestartTypes]
 ASSUME MaxR \in [Processes -> Nat]
 ASSUME MaxT \in [Processes -> Nat]
 ASSUME MaxClock \in Nat
+ASSUME Links \in [Processes -> SUBSET Processes]
+ASSUME Monitors \in [Processes -> SUBSET Processes]
+ASSUME TrapsExits \in [Processes -> BOOLEAN]
+ASSUME HandlesDown \in [Processes -> BOOLEAN]
+ASSUME \A p, q \in Processes : q \in Links[p] <=> p \in Links[q]
 
 \* --- Derived helpers ---
 
@@ -83,6 +88,20 @@ MyPosition(p) ==
   IF p = Root THEN 0
   ELSE PositionOf(p, ChildrenOf[ParentOf(p)])
 
+\* Processes linked to p that could kill p via exit signal.
+\* Only relevant when p does NOT trap exits.
+LinkKillersOf(p) ==
+  IF TrapsExits[p]
+  THEN {}
+  ELSE Links[p] \ {p}
+
+\* Processes p monitors that could kill p via unhandled DOWN message.
+\* Only relevant when p does NOT handle DOWN messages.
+MonitorKillersOf(p) ==
+  IF HandlesDown[p]
+  THEN {}
+  ELSE Monitors[p]
+
 \* Kill graph: all processes whose termination could cause P to die.
 \*   - P's parent can always kill P
 \*   - Under OneForAll, any sibling's death kills all siblings
@@ -90,6 +109,8 @@ MyPosition(p) ==
 \*     triggers a cascade kills P
 \*   - Under OneForOne / SimpleOneForOne, siblings don't affect each other
 \*   - Any ancestor can kill P via restart-intensity escalation propagating down
+\*   - Linked processes kill P if P doesn't trap exits
+\*   - Monitored processes kill P if P doesn't handle DOWN messages
 KillGraph(P) ==
   LET sup       == ParentOf(P)
       strat     == Strategy[sup]
@@ -105,6 +126,8 @@ KillGraph(P) ==
         [] OTHER ->
           {}
   IN ancestors \cup killerSiblings
+     \cup LinkKillersOf(P)
+     \cup MonitorKillersOf(P)
 
 \* Check if a terminated child should be restarted based on its
 \* restart type and exit reason

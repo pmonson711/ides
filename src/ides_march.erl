@@ -2,7 +2,14 @@
 
 -moduledoc "Kill graph analysis and restart logic for ides.".
 
--export([kill_graph/1, should_restart/2, affected_siblings/1]).
+-export([
+    kill_graph/1,
+    should_restart/2,
+    affected_siblings/1,
+    link_info/1,
+    monitor_info/1,
+    kill_graph_detail/1
+]).
 
 -type exit_reason() :: normal | abnormal.
 -export_type([exit_reason/0]).
@@ -35,12 +42,14 @@ kill_graph(TargetPid) ->
             case ides_family:parent_info(TargetPid) of
                 {ok, Info} ->
                     KillerSiblings = killer_siblings(Info),
+                    LinkKillers = link_killers(TargetPid),
+                    MonitorKillers = monitor_killers(TargetPid),
                     {ok,
-                        ordsets:to_list(
-                            ordsets:union(
-                                ordsets:from_list(AncestorPids),
-                                ordsets:from_list(KillerSiblings)
-                            )
+                        lists:usort(
+                            AncestorPids ++
+                                KillerSiblings ++
+                                LinkKillers ++
+                                MonitorKillers
                         )};
                 {error, Reason} ->
                     {error, Reason}
@@ -94,6 +103,92 @@ affected_siblings(TargetPid) ->
             {error, Reason}
     end.
 
+-doc """
+Return link information for the given process.
+
+Reports which processes are linked to `Pid` and whether
+`Pid` traps exits. Linked processes are potential killers
+if `traps_exits` is `false`.
+""".
+-spec link_info(Pid :: pid()) -> {ok, ides_family:link_info()} | {error, term()}.
+link_info(Pid) ->
+    case erlang:process_info(Pid, [links, trap_exit, status]) of
+        [{links, Links}, {trap_exit, Traps}, {status, _}] ->
+            {ok, #{
+                links => Links -- [Pid],
+                traps_exits => Traps
+            }};
+        undefined ->
+            {error, process_not_alive};
+        Other ->
+            {error, {unexpected_process_info, Other}}
+    end.
+
+-doc """
+Return monitor information for the given process.
+
+Reports which processes `Pid` is monitoring and which
+processes are monitoring `Pid`. Monitored processes are
+potential killers if `Pid` doesn't handle DOWN messages.
+""".
+-spec monitor_info(Pid :: pid()) -> {ok, ides_family:monitor_info()} | {error, term()}.
+monitor_info(Pid) ->
+    case erlang:process_info(Pid, [monitors, monitored_by, status]) of
+        [{monitors, Monitors}, {monitored_by, MonitoredBy}, {status, _}] ->
+            MonitorPids = [MPid || {process, MPid} <- Monitors],
+            {ok, #{
+                monitors => MonitorPids,
+                monitored_by => MonitoredBy
+            }};
+        undefined ->
+            {error, process_not_alive};
+        Other ->
+            {error, {unexpected_process_info, Other}}
+    end.
+
+-doc """
+Return the kill graph with each entry tagged by its kill mechanism:
+- `ancestor` — supervisor ancestor
+- `sibling` — sibling via supervisor strategy
+- `link` — linked process (relevant if target doesn't trap exits)
+- `monitor` — monitored process (relevant if target doesn't handle DOWN)
+""".
+-spec kill_graph_detail(TargetPid :: pid()) -> {ok, [ides_family:kill_source()]} | {error, term()}.
+kill_graph_detail(TargetPid) ->
+    case ides_family:get_ancestors(TargetPid) of
+        {ok, Ancestors} when Ancestors =/= [] ->
+            AncestorPids = lists:filtermap(
+                fun(P) ->
+                    try ides_family:resolve_pid(P) of
+                        Pid -> {true, Pid}
+                    catch
+                        _:_ -> false
+                    end
+                end,
+                Ancestors
+            ),
+            case ides_family:parent_info(TargetPid) of
+                {ok, Info} ->
+                    SiblingKillers = killer_siblings(Info),
+                    LinkKillers = link_killers(TargetPid),
+                    MonitorKillers = monitor_killers(TargetPid),
+                    Tagged =
+                        [{ancestor, P} || P <- AncestorPids] ++
+                            [{sibling, P} || P <- SiblingKillers] ++
+                            [{link, P} || P <- LinkKillers] ++
+                            [{monitor, P} || P <- MonitorKillers],
+                    {ok, Tagged};
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {ok, []} ->
+            {error, no_ancestors};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%% --- Internal ---
+
 -spec killer_siblings(Info :: ides_family:parent_info()) -> [pid()].
 killer_siblings(#{sup_strategy := one_for_all, child_pids := Children, target_position := _Pos}) ->
     pids(Children);
@@ -127,6 +222,26 @@ affected_siblings_rule(#{
     sup_strategy := simple_one_for_one, child_pids := Children, target_position := Pos
 }) ->
     pids(child_sublist(Children, Pos, 1)).
+
+-spec link_killers(Pid :: pid()) -> [pid()].
+link_killers(Pid) ->
+    case link_info(Pid) of
+        {ok, #{traps_exits := true}} ->
+            [];
+        {ok, #{links := Links, traps_exits := false}} ->
+            Links;
+        _ ->
+            []
+    end.
+
+-spec monitor_killers(Pid :: pid()) -> [pid()].
+monitor_killers(Pid) ->
+    case monitor_info(Pid) of
+        {ok, #{monitors := Monitors}} ->
+            Monitors;
+        _ ->
+            []
+    end.
 
 -spec pids(Children :: [{term(), pid()}]) -> [pid()].
 pids(Children) ->
