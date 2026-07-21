@@ -512,8 +512,7 @@ intensity_info_integration_test_() ->
             unlink(SupPid),
             SupPid
         end,
-        fun(SupPid) -> exit(SupPid, shutdown) end,
-        fun(SupPid) ->
+        fun(SupPid) -> exit(SupPid, shutdown) end, fun(SupPid) ->
             ?_test(begin
                 {ok, Info} = ides:intensity_info(SupPid),
                 ?assert(is_map_key(max_restarts, Info)),
