@@ -16,5 +16,9 @@ INSTANCE SupervisorModel WITH
   RestartType <- [x \in {"root", "sup1", "sub1", "sub2"} |-> "permanent"],
   MaxR        <- [x \in {"root", "sup1", "sub1", "sub2"} |-> CASE x = "root" -> 2 [] x = "sup1" -> 1 [] OTHER -> 0],
   MaxT        <- [x \in {"root", "sup1", "sub1", "sub2"} |-> CASE x = "root" -> 2 [] x = "sup1" -> 2 [] OTHER -> 0],
-  MaxClock    <- 2
+  MaxClock    <- 2,
+  Links       <- [p \in {"root", "sup1", "sub1", "sub2"} |-> {}],
+  Monitors    <- [p \in {"root", "sup1", "sub1", "sub2"} |-> {}],
+  TrapsExits  <- [p \in {"root", "sup1", "sub1", "sub2"} |-> FALSE],
+  HandlesDown <- [p \in {"root", "sup1", "sub1", "sub2"} |-> FALSE]
 ====
