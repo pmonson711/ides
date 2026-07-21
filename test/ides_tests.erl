@@ -614,6 +614,66 @@ init_analysis_format_no_children_test() ->
     ?assert(string:find(Output, "Worst-case restart count: 0") =/= nomatch),
     ?assert(string:find(Output, "Remaining budget:") =/= nomatch).
 
+init_analysis_integration_test_() ->
+    {setup,
+        fun() ->
+            Children = [
+                #{
+                    id => perm_a,
+                    start => {ides_test_sup, start_child, []},
+                    restart => permanent,
+                    shutdown => 5000,
+                    type => worker,
+                    modules => [ides_test_sup]
+                },
+                #{
+                    id => trans_b,
+                    start => {ides_test_sup, start_child, []},
+                    restart => transient,
+                    shutdown => infinity,
+                    type => worker,
+                    modules => [ides_test_sup]
+                },
+                #{
+                    id => temp_c,
+                    start => {ides_test_sup, start_child, []},
+                    restart => temporary,
+                    shutdown => 10000,
+                    type => worker,
+                    modules => [ides_test_sup]
+                }
+            ],
+            {ok, SupPid} = ides_test_sup:start_link(test_ia, one_for_one, Children),
+            unlink(SupPid),
+            SupPid
+        end,
+        fun(SupPid) -> exit(SupPid, shutdown) end, fun(SupPid) ->
+            ?_test(begin
+                ChildList = supervisor:which_children(SupPid),
+                {perm_a, PermPid, _, _} = lists:keyfind(perm_a, 1, ChildList),
+                {ok, Analysis} = ides:init_analysis(PermPid),
+                ?assertEqual(SupPid, maps:get(supervisor, Analysis)),
+                ?assertEqual(one_for_one, maps:get(sup_strategy, Analysis)),
+                ?assertEqual(3, maps:get(total_children, Analysis)),
+                ?assertEqual(2, maps:get(worst_case_restarts, Analysis)),
+                Children = maps:get(children, Analysis),
+                ?assertEqual(3, length(Children)),
+                PermInfo = find_child(perm_a, Children),
+                ?assertEqual(true, maps:get(counts_against_intensity, PermInfo)),
+                ?assertEqual(permanent, maps:get(restart_type, PermInfo)),
+                ?assertEqual(5000, maps:get(shutdown, PermInfo)),
+                TransInfo = find_child(trans_b, Children),
+                ?assertEqual(true, maps:get(counts_against_intensity, TransInfo)),
+                ?assertEqual(infinity, maps:get(shutdown, TransInfo)),
+                TempInfo = find_child(temp_c, Children),
+                ?assertEqual(false, maps:get(counts_against_intensity, TempInfo)),
+                ?assertEqual(10000, maps:get(shutdown, TempInfo))
+            end)
+        end}.
+
+find_child(Id, [#{id := Id} = Child | _]) -> Child;
+find_child(Id, [_ | Rest]) -> find_child(Id, Rest).
+
 %% helpers: throwaway PIDs for tree construction
 p1() -> spawn(fun() -> ok end).
 p2() -> spawn(fun() -> ok end).
