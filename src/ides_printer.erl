@@ -34,7 +34,7 @@ format_node(
     Depth
 ) ->
     Prefix = prefix(TargetPid, Pid, Depth),
-    Anno = [" (", atom_to_list(Strategy), ", ", atom_to_list(RestartType), ")"],
+    Anno = [supervisor_anno(Strategy, RestartType, Pid)],
     [
         Prefix,
         Name,
@@ -54,7 +54,7 @@ format_node(
     Depth
 ) ->
     Prefix = prefix(TargetPid, Pid, Depth),
-    Anno = [" (", atom_to_list(Strategy), ")"],
+    Anno = [supervisor_anno(Strategy, Pid)],
     [
         Prefix,
         Name,
@@ -90,6 +90,25 @@ spaces(N) -> [$\s | spaces(N - 1)].
 -spec marker(TargetPid :: pid(), Pid :: pid()) -> string().
 marker(TargetPid, TargetPid) -> "* ";
 marker(_TargetPid, _Pid) -> "  ".
+
+-spec supervisor_anno(Strategy :: atom(), RestartType :: atom(), Pid :: pid()) -> iolist().
+supervisor_anno(Strategy, RestartType, Pid) ->
+    [[" (", atom_to_list(Strategy), ", ", atom_to_list(RestartType), intensity_suffix(Pid), ")"]].
+
+-spec supervisor_anno(Strategy :: atom(), Pid :: pid()) -> iolist().
+supervisor_anno(Strategy, Pid) ->
+    [[" (", atom_to_list(Strategy), intensity_suffix(Pid), ")"]].
+
+-spec intensity_suffix(Pid :: pid()) -> iolist().
+intensity_suffix(Pid) ->
+    case ides_march:intensity_info(Pid) of
+        {ok, #{max_restarts := MaxR, max_period := MaxT, current_count := Count}} ->
+            io_lib:format(", ~p/~p in ~ps", [Count, MaxR, MaxT]);
+        {ok, #{max_restarts := MaxR, max_period := MaxT}} ->
+            io_lib:format(", max ~p/~ps", [MaxR, MaxT]);
+        _ ->
+            []
+    end.
 
 -doc """
 Like `format/2` but writes the rendered tree to stdout.

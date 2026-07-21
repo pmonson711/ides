@@ -11,7 +11,8 @@
     parent_info/0,
     link_info/0,
     monitor_info/0,
-    kill_source/0
+    kill_source/0,
+    intensity_info/0
 ]).
 
 -doc "Restart strategy of a supervisor.".
@@ -80,6 +81,14 @@ supervisor, `restart_type` is present.
     | {sibling, pid()}
     | {link, pid()}
     | {monitor, pid()}.
+
+-doc "Restart intensity information for a supervisor.".
+-type intensity_info() :: #{
+    max_restarts := non_neg_integer(),
+    max_period := non_neg_integer(),
+    current_count => non_neg_integer(),
+    remaining => non_neg_integer()
+}.
 
 %% Internal helpers exported for sibling modules
 -export([

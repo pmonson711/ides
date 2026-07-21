@@ -15,6 +15,7 @@ exports_test() ->
         {kill_graph_detail, 1},
         {link_info, 1},
         {monitor_info, 1},
+        {intensity_info, 1},
         {print, 2},
         {print_detail, 3},
         {should_restart, 2}
@@ -38,7 +39,7 @@ format_one_for_one_test() ->
         ]
     },
     ?assertEqual(
-        "my_sup (one_for_one)\n"
+        "my_sup (one_for_one, max 1/5s)\n"
         "    my_server (permanent)\n"
         "  * my_statem (transient)\n",
         lists:flatten(ides:format(TargetPid, Tree))
@@ -58,7 +59,7 @@ format_one_for_all_test() ->
         ]
     },
     ?assertEqual(
-        "my_sup (one_for_all)\n"
+        "my_sup (one_for_all, max 1/5s)\n"
         "    worker_1 (permanent)\n"
         "  * worker_2 (permanent)\n"
         "    cache (temporary)\n",
@@ -79,7 +80,7 @@ format_rest_for_one_test() ->
         ]
     },
     ?assertEqual(
-        "my_sup (rest_for_one)\n"
+        "my_sup (rest_for_one, max 1/5s)\n"
         "    startup (permanent)\n"
         "  * process (permanent)\n"
         "    cleanup (permanent)\n",
@@ -99,7 +100,7 @@ format_simple_one_for_one_test() ->
         ]
     },
     ?assertEqual(
-        "pool_sup (simple_one_for_one)\n"
+        "pool_sup (simple_one_for_one, max 1/5s)\n"
         "    handler_1 (permanent)\n"
         "  * handler_2 (permanent)\n",
         lists:flatten(ides:format(TargetPid, Tree))
@@ -132,8 +133,8 @@ format_nested_test() ->
         ]
     },
     ?assertEqual(
-        "app_sup (one_for_one)\n"
-        "    sup1 (one_for_all, permanent)\n"
+        "app_sup (one_for_one, max 1/5s)\n"
+        "    sup1 (one_for_all, permanent, max 1/5s)\n"
         "        worker_1 (permanent)\n"
         "      * worker_2 (permanent)\n",
         lists:flatten(ides:format(TargetPid, Tree))
@@ -491,6 +492,43 @@ kill_graph_includes_links_test_() ->
                 ?assert(is_boolean(Traps))
             end)
         end}.
+
+%% --- Intensity info tests ---
+
+intensity_info_integration_test_() ->
+    {setup,
+        fun() ->
+            Children = [
+                #{
+                    id => worker_a,
+                    start => {ides_test_sup, start_child, []},
+                    restart => permanent,
+                    shutdown => 5000,
+                    type => worker,
+                    modules => [ides_test_sup]
+                }
+            ],
+            {ok, SupPid} = ides_test_sup:start_link(test_ii, one_for_one, Children),
+            unlink(SupPid),
+            SupPid
+        end,
+        fun(SupPid) -> exit(SupPid, shutdown) end,
+        fun(SupPid) ->
+            ?_test(begin
+                {ok, Info} = ides:intensity_info(SupPid),
+                ?assert(is_map_key(max_restarts, Info)),
+                ?assert(is_map_key(max_period, Info)),
+                ?assert(is_integer(maps:get(max_restarts, Info))),
+                ?assert(is_integer(maps:get(max_period, Info)))
+            end)
+        end}.
+
+intensity_info_dead_process_test() ->
+    Pid = spawn(fun() -> ok end),
+    timer:sleep(10),
+    {ok, Info} = ides:intensity_info(Pid),
+    ?assertEqual(1, maps:get(max_restarts, Info)),
+    ?assertEqual(5, maps:get(max_period, Info)).
 
 %% helpers: throwaway PIDs for tree construction
 p1() -> spawn(fun() -> ok end).
