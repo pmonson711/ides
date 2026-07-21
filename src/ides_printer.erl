@@ -2,7 +2,7 @@
 
 -moduledoc "Formatting and rendering for ides supervision trees.".
 
--export([format/2, print/2]).
+-export([format/2, print/2, format_detail/3, print_detail/3]).
 
 -doc """
 Render the supervision tree as indented ASCII text.
@@ -97,3 +97,45 @@ Like `format/2` but writes the rendered tree to stdout.
 -spec print(TargetPid :: pid(), Tree :: ides_family:process()) -> ok.
 print(TargetPid, Tree) ->
     io:put_chars(format(TargetPid, Tree)).
+
+-doc #{
+    f => format_detail,
+    a => 3,
+    d =>
+        "Like `format/2` but also includes a section showing link\\n"
+        "and monitor relationships below the tree.\\n"
+        "\\n"
+        "`KillSources` is the result of `ides_march:kill_graph_detail/1`."
+}.
+-spec format_detail(TargetPid :: pid(), Tree :: ides_family:process(), KillSources :: [ides_family:kill_source()]) -> iolist().
+format_detail(TargetPid, Tree, KillSources) ->
+    TreePart = format(TargetPid, Tree),
+    KillPart = format_kill_sources(KillSources),
+    [TreePart, "\nKill Graph:\n", KillPart].
+
+-spec print_detail(TargetPid :: pid(), Tree :: ides_family:process(), KillSources :: [ides_family:kill_source()]) -> ok.
+print_detail(TargetPid, Tree, KillSources) ->
+    io:put_chars(format_detail(TargetPid, Tree, KillSources)).
+
+%% --- Internal ---
+
+-spec format_kill_sources(Sources :: [ides_family:kill_source()]) -> iolist().
+format_kill_sources([]) ->
+    ["  (none)\n"];
+format_kill_sources(Sources) ->
+    Ancestors = [P || {ancestor, P} <- Sources],
+    Siblings  = [P || {sibling, P} <- Sources],
+    Links     = [P || {link, P} <- Sources],
+    Monitors  = [P || {monitor, P} <- Sources],
+    [
+        format_kill_group("  ancestors", Ancestors),
+        format_kill_group("  siblings ", Siblings),
+        format_kill_group("  links    ", Links),
+        format_kill_group("  monitors ", Monitors)
+    ].
+
+-spec format_kill_group(Label :: string(), Pids :: [pid()]) -> iolist().
+format_kill_group(_Label, []) -> [];
+format_kill_group(Label, Pids) ->
+    PidStrs = [io_lib:format("~p", [P]) || P <- lists:sort(Pids)],
+    [Label, ": ", string:join(PidStrs, ", "), "\n"].

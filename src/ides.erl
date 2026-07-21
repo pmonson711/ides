@@ -22,7 +22,12 @@ Uses OTP primitives: `erlang:process_info/2` for `$ancestors`,
     print/2,
     kill_graph/1,
     should_restart/2,
-    affected_siblings/1
+    affected_siblings/1,
+    link_info/1,
+    monitor_info/1,
+    kill_graph_detail/1,
+    format_detail/3,
+    print_detail/3
 ]).
 
 -type supervisor_strategy() :: ides_family:supervisor_strategy().
@@ -31,6 +36,9 @@ Uses OTP primitives: `erlang:process_info/2` for `$ancestors`,
 -type supervisor_process() :: ides_family:supervisor_process().
 -type process() :: ides_family:process().
 -type exit_reason() :: ides_march:exit_reason().
+-type link_info() :: ides_family:link_info().
+-type monitor_info() :: ides_family:monitor_info().
+-type kill_source() :: ides_family:kill_source().
 
 -export_type([
     process/0,
@@ -73,3 +81,25 @@ should_restart(Pid, Reason) ->
 -spec affected_siblings(TargetPid :: pid()) -> {ok, [pid()]} | {error, term()}.
 affected_siblings(TargetPid) ->
     ides_march:affected_siblings(TargetPid).
+
+%% --- Link and monitor analysis ---
+
+-spec link_info(Pid :: pid()) -> {ok, link_info()} | {error, term()}.
+link_info(Pid) ->
+    ides_march:link_info(Pid).
+
+-spec monitor_info(Pid :: pid()) -> {ok, monitor_info()} | {error, term()}.
+monitor_info(Pid) ->
+    ides_march:monitor_info(Pid).
+
+-spec kill_graph_detail(TargetPid :: pid()) -> {ok, [kill_source()]} | {error, term()}.
+kill_graph_detail(TargetPid) ->
+    ides_march:kill_graph_detail(TargetPid).
+
+-spec format_detail(TargetPid :: pid(), Tree :: process(), KillSources :: [kill_source()]) -> iolist().
+format_detail(TargetPid, Tree, KillSources) ->
+    ides_printer:format_detail(TargetPid, Tree, KillSources).
+
+-spec print_detail(TargetPid :: pid(), Tree :: process(), KillSources :: [kill_source()]) -> ok.
+print_detail(TargetPid, Tree, KillSources) ->
+    ides_printer:print_detail(TargetPid, Tree, KillSources).

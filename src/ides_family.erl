@@ -8,7 +8,10 @@
     child_process/0,
     supervisor_strategy/0,
     child_restart_type/0,
-    parent_info/0
+    parent_info/0,
+    link_info/0,
+    monitor_info/0,
+    kill_source/0
 ]).
 
 -doc "Restart strategy of a supervisor.".
@@ -58,6 +61,25 @@ supervisor, `restart_type` is present.
     child_pids := [{term(), pid()}],
     target_position => pos_integer()
 }.
+
+-doc "Link relationship info for a process.".
+-type link_info() :: #{
+    links := [pid()],
+    traps_exits := boolean()
+}.
+
+-doc "Monitor relationship info for a process.".
+-type monitor_info() :: #{
+    monitors := [pid()],
+    monitored_by := [pid()]
+}.
+
+-doc "Tagged source of a kill: which process and by what mechanism.".
+-type kill_source() ::
+    {ancestor, pid()}
+    | {sibling, pid()}
+    | {link, pid()}
+    | {monitor, pid()}.
 
 %% Internal helpers exported for sibling modules
 -export([
