@@ -83,24 +83,19 @@ one_for_all_logger_includes_siblings_test(_Config) ->
     ?assert(lists:member(AuthPid, Killers)).
 
 %% --- rest_for_one ---
-%% Under rest_for_one, siblings at earlier positions are killers for later children.
-%% The first child has no sibling killers.
-%% web_sup children are [demo_handler_sup, demo_router].  Only the ordering
-%% from supervisor:which_children/1 matters, not the init spec order.
+%% Under rest_for_one, siblings at earlier positions (in which_children order)
+%% are killers for later children. The first child has no sibling killers.
+%% Determined dynamically since which_children map-iteration order varies by OTP version.
 
 rest_for_one_first_child_no_sibling_killers_test(_Config) ->
-    {ok, HandlerPid} = demo:whereis(demo_handler_sup),
-    {ok, RouterPid} = demo:whereis(demo_router),
-    {ok, Killers} = ides:kill_graph(HandlerPid),
-    %% Handler is position 1 under rest_for_one: no sibling killers
-    ?assertNot(lists:member(RouterPid, Killers)).
+    [FirstPid, SecondPid | _] = web_sup_child_pids(),
+    {ok, Killers} = ides:kill_graph(FirstPid),
+    ?assertNot(lists:member(SecondPid, Killers)).
 
 rest_for_one_later_child_has_earlier_killers_test(_Config) ->
-    {ok, RouterPid} = demo:whereis(demo_router),
-    {ok, HandlerPid} = demo:whereis(demo_handler_sup),
-    {ok, Killers} = ides:kill_graph(RouterPid),
-    %% Router is position 2 under rest_for_one: earlier sibling (handler) is killer
-    ?assert(lists:member(HandlerPid, Killers)).
+    [FirstPid, SecondPid | _] = web_sup_child_pids(),
+    {ok, Killers} = ides:kill_graph(SecondPid),
+    ?assert(lists:member(FirstPid, Killers)).
 
 %% --- Parent supervisor always in kill graph ---
 
@@ -109,3 +104,9 @@ every_process_includes_parent_supervisor_test(_Config) ->
     {ok, HandlerPid} = demo:whereis(demo_handler_sup),
     {ok, Killers} = ides:kill_graph(AuthPid),
     ?assert(lists:member(HandlerPid, Killers)).
+
+%% --- Helpers ---
+
+web_sup_child_pids() ->
+    Children = supervisor:which_children(demo_web_sup),
+    [Pid || {_Id, Pid, _Type, _Mods} <- Children, is_pid(Pid)].
