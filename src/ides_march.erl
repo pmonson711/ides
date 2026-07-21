@@ -8,7 +8,8 @@
     affected_siblings/1,
     link_info/1,
     monitor_info/1,
-    kill_graph_detail/1
+    kill_graph_detail/1,
+    intensity_info/1
 ]).
 
 -type exit_reason() :: normal | abnormal.
@@ -185,6 +186,38 @@ kill_graph_detail(TargetPid) ->
             {error, no_ancestors};
         {error, Reason} ->
             {error, Reason}
+    end.
+
+-doc """
+Return restart intensity information for a supervisor.
+
+Reports the configured MaxR and MaxT policy, plus the current
+restart count and remaining budget if available from OTP state.
+""".
+-spec intensity_info(SupPid :: pid()) -> {ok, ides_family:intensity_info()} | {error, term()}.
+intensity_info(SupPid) ->
+    try sys:get_state(SupPid) of
+        State when is_tuple(State), tuple_size(State) >= 7 ->
+            Intensity = element(5, State),
+            Period = element(6, State),
+            Restarts = element(7, State),
+            case {is_integer(Intensity), is_integer(Period), is_list(Restarts)} of
+                {true, true, true} ->
+                    Count = length(Restarts),
+                    {ok, #{
+                        max_restarts => Intensity,
+                        max_period => Period,
+                        current_count => Count,
+                        remaining => max(0, Intensity - Count)
+                    }};
+                _ ->
+                    {ok, #{max_restarts => 1, max_period => 5}}
+            end;
+        _ ->
+            {ok, #{max_restarts => 1, max_period => 5}}
+    catch
+        _:_ ->
+            {ok, #{max_restarts => 1, max_period => 5}}
     end.
 
 %% --- Internal ---

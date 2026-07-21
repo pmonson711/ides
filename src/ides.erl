@@ -27,7 +27,8 @@ Uses OTP primitives: `erlang:process_info/2` for `$ancestors`,
     monitor_info/1,
     kill_graph_detail/1,
     format_detail/3,
-    print_detail/3
+    print_detail/3,
+    intensity_info/1
 ]).
 
 -type supervisor_strategy() :: ides_family:supervisor_strategy().
@@ -39,6 +40,7 @@ Uses OTP primitives: `erlang:process_info/2` for `$ancestors`,
 -type link_info() :: ides_family:link_info().
 -type monitor_info() :: ides_family:monitor_info().
 -type kill_source() :: ides_family:kill_source().
+-type intensity_info() :: ides_family:intensity_info().
 
 -export_type([
     process/0,
@@ -46,7 +48,8 @@ Uses OTP primitives: `erlang:process_info/2` for `$ancestors`,
     child_process/0,
     supervisor_strategy/0,
     child_restart_type/0,
-    exit_reason/0
+    exit_reason/0,
+    intensity_info/0
 ]).
 
 -spec ancestors(TargetPid :: pid()) -> {ok, process()} | {error, term()}.
@@ -95,3 +98,7 @@ format_detail(TargetPid, Tree, KillSources) ->
 -spec print_detail(TargetPid :: pid(), Tree :: process(), KillSources :: [kill_source()]) -> ok.
 print_detail(TargetPid, Tree, KillSources) ->
     ides_printer:print_detail(TargetPid, Tree, KillSources).
+
+-spec intensity_info(SupPid :: pid()) -> {ok, intensity_info()} | {error, term()}.
+intensity_info(SupPid) ->
+    ides_march:intensity_info(SupPid).
