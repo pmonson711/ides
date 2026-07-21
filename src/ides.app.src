@@ -1,13 +1,9 @@
-{application, ides, [
-    {description, "An OTP library"},
-    {vsn, "0.2.0"},
-    {registered, []},
-    {applications, [
-        kernel,
-        stdlib
-    ]},
-    {env, []},
-    {modules, []},
-    {licenses, ["Apache-2.0"]},
-    {links, []}
- ]}.
+{application,ides,
+             [{description,"An OTP library"},
+              {vsn,"0.3.0"},
+              {registered,[]},
+              {applications,[kernel,stdlib]},
+              {env,[]},
+              {modules,[]},
+              {licenses,["Apache-2.0"]},
+              {links,[]}]}.
