@@ -452,8 +452,7 @@ kill_graph_detail_test_() ->
             unlink(SupPid),
             SupPid
         end,
-        fun(SupPid) -> exit(SupPid, shutdown) end,
-        fun(SupPid) ->
+        fun(SupPid) -> exit(SupPid, shutdown) end, fun(SupPid) ->
             ?_test(begin
                 ChildList = supervisor:which_children(SupPid),
                 {child1, ChildPid, _, _} = lists:keyfind(child1, 1, ChildList),
@@ -481,8 +480,7 @@ kill_graph_includes_links_test_() ->
             unlink(SupPid),
             SupPid
         end,
-        fun(SupPid) -> exit(SupPid, shutdown) end,
-        fun(SupPid) ->
+        fun(SupPid) -> exit(SupPid, shutdown) end, fun(SupPid) ->
             ?_test(begin
                 ChildList = supervisor:which_children(SupPid),
                 {child_a, ChildPid, _, _} = lists:keyfind(child_a, 1, ChildList),

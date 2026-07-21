@@ -2,7 +2,14 @@
 
 -moduledoc "Kill graph analysis and restart logic for ides.".
 
--export([kill_graph/1, should_restart/2, affected_siblings/1, link_info/1, monitor_info/1, kill_graph_detail/1]).
+-export([
+    kill_graph/1,
+    should_restart/2,
+    affected_siblings/1,
+    link_info/1,
+    monitor_info/1,
+    kill_graph_detail/1
+]).
 
 -type exit_reason() :: normal | abnormal.
 -export_type([exit_reason/0]).
@@ -180,9 +187,9 @@ kill_graph_detail(TargetPid) ->
                     MonitorKillers = monitor_killers(TargetPid),
                     Tagged =
                         [{ancestor, P} || P <- AncestorPids] ++
-                        [{sibling, P} || P <- SiblingKillers] ++
-                        [{link, P} || P <- LinkKillers] ++
-                        [{monitor, P} || P <- MonitorKillers],
+                            [{sibling, P} || P <- SiblingKillers] ++
+                            [{link, P} || P <- LinkKillers] ++
+                            [{monitor, P} || P <- MonitorKillers],
                     {ok, Tagged};
                 {error, Reason} ->
                     {error, Reason}

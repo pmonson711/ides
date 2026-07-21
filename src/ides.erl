@@ -49,15 +49,6 @@ Uses OTP primitives: `erlang:process_info/2` for `$ancestors`,
     exit_reason/0
 ]).
 
--ignore_xref([
-    ancestors/1,
-    format/2,
-    print/2,
-    kill_graph/1,
-    should_restart/2,
-    affected_siblings/1
-]).
-
 -spec ancestors(TargetPid :: pid()) -> {ok, process()} | {error, term()}.
 ancestors(TargetPid) ->
     ides_family:ancestors(TargetPid).
@@ -96,7 +87,8 @@ monitor_info(Pid) ->
 kill_graph_detail(TargetPid) ->
     ides_march:kill_graph_detail(TargetPid).
 
--spec format_detail(TargetPid :: pid(), Tree :: process(), KillSources :: [kill_source()]) -> iolist().
+-spec format_detail(TargetPid :: pid(), Tree :: process(), KillSources :: [kill_source()]) ->
+    iolist().
 format_detail(TargetPid, Tree, KillSources) ->
     ides_printer:format_detail(TargetPid, Tree, KillSources).
 

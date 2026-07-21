@@ -107,13 +107,17 @@ print(TargetPid, Tree) ->
         "\\n"
         "`KillSources` is the result of `ides_march:kill_graph_detail/1`."
 }.
--spec format_detail(TargetPid :: pid(), Tree :: ides_family:process(), KillSources :: [ides_family:kill_source()]) -> iolist().
+-spec format_detail(
+    TargetPid :: pid(), Tree :: ides_family:process(), KillSources :: [ides_family:kill_source()]
+) -> iolist().
 format_detail(TargetPid, Tree, KillSources) ->
     TreePart = format(TargetPid, Tree),
     KillPart = format_kill_sources(KillSources),
     [TreePart, "\nKill Graph:\n", KillPart].
 
--spec print_detail(TargetPid :: pid(), Tree :: ides_family:process(), KillSources :: [ides_family:kill_source()]) -> ok.
+-spec print_detail(
+    TargetPid :: pid(), Tree :: ides_family:process(), KillSources :: [ides_family:kill_source()]
+) -> ok.
 print_detail(TargetPid, Tree, KillSources) ->
     io:put_chars(format_detail(TargetPid, Tree, KillSources)).
 
@@ -124,9 +128,9 @@ format_kill_sources([]) ->
     ["  (none)\n"];
 format_kill_sources(Sources) ->
     Ancestors = [P || {ancestor, P} <- Sources],
-    Siblings  = [P || {sibling, P} <- Sources],
-    Links     = [P || {link, P} <- Sources],
-    Monitors  = [P || {monitor, P} <- Sources],
+    Siblings = [P || {sibling, P} <- Sources],
+    Links = [P || {link, P} <- Sources],
+    Monitors = [P || {monitor, P} <- Sources],
     [
         format_kill_group("  ancestors", Ancestors),
         format_kill_group("  siblings ", Siblings),
@@ -135,7 +139,8 @@ format_kill_sources(Sources) ->
     ].
 
 -spec format_kill_group(Label :: string(), Pids :: [pid()]) -> iolist().
-format_kill_group(_Label, []) -> [];
+format_kill_group(_Label, []) ->
+    [];
 format_kill_group(Label, Pids) ->
     PidStrs = [io_lib:format("~p", [P]) || P <- lists:sort(Pids)],
     [Label, ": ", string:join(PidStrs, ", "), "\n"].
