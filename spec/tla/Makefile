@@ -9,7 +9,9 @@ MODELS := \
 	MCOneForAll \
 	MCRestForOne \
 	MCSimpleOneForOne \
-	MCNestedEscalation
+	MCNestedEscalation \
+	MCLinkKill \
+	MCMonitorCrash
 
 .PHONY: all check $(MODELS) clean
 

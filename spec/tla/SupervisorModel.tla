@@ -45,7 +45,14 @@ NormalTermination(p) ==
 
 AbnormalTermination(p) ==
   /\ proc_state[p].state = Running
-  /\ proc_state' = [proc_state EXCEPT ![p] = [@ EXCEPT !.state = Terminated, !.exit = Abnormal]]
+  /\ LET link_victims == {q \in Links[p] : q /= p /\ ~TrapsExits[q]
+                                /\ proc_state[q].state = Running}
+     IN /\ proc_state' = [q \in Processes |->
+             CASE q = p ->
+               [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[q].type]
+             [] q \in link_victims ->
+               [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[q].type]
+             [] OTHER -> proc_state[q]]
   /\ history' = [action |-> "AbnormalTermination", pid |-> p]
   /\ clock' = clock
   /\ UNCHANGED <<restart_window, monitor_down>>
@@ -116,7 +123,6 @@ SupervisorReacts(sup) ==
 Next ==
   \/ \E p \in Processes : NormalTermination(p)
   \/ \E p \in Processes : AbnormalTermination(p)
-  \/ \E p \in Processes : LinkKill(p)
   \/ \E p \in Processes : MonitorCrash(p)
   \/ \E sup \in {s \in Processes : IsSupervisor(s)} : SupervisorReacts(sup)
 
@@ -184,18 +190,15 @@ KillGraphCorrect ==
     IN \A p \in killed :
       \E killer \in KillGraph(p) :
         proc_state[killer].state = Terminated
-====
 
 \* Linked non-trapping processes must be terminated when their
 \* linked partner dies abnormally.
 LinkPropagationCorrect ==
-  \A p, q \in Processes :
-    (proc_state[p].state = Terminated /\
-     proc_state[p].exit = Abnormal /\
-     q \in Links[p] /\
-     q /= p /\
-     ~TrapsExits[q]) =>
-    proc_state[q].state = Terminated
+  (history.action = "AbnormalTermination") =>
+    LET p == history.pid
+    IN \A q \in Processes :
+      (q \in Links[p] /\ q /= p /\ ~TrapsExits[q]) =>
+      proc_state[q].state = Terminated
 
 \* If a monitoring process crashes due to unhandled DOWN, the
 \* monitored process must be in its kill graph.
@@ -206,3 +209,4 @@ MonitorCrashInKillGraph ==
                            /\ ~HandlesDown[q]
                            /\ proc_state[q].state = Terminated}
     IN \A v \in victims : killed_pid \in KillGraph(v)
+====
