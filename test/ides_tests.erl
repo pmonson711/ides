@@ -11,6 +11,7 @@ exports_test() ->
         {ancestors, 1},
         {format, 2},
         {format_detail, 3},
+        {format_init_analysis, 1},
         {kill_graph, 1},
         {kill_graph_detail, 1},
         {link_info, 1},
@@ -18,6 +19,7 @@ exports_test() ->
         {intensity_info, 1},
         {print, 2},
         {print_detail, 3},
+        {print_init_analysis, 1},
         {should_restart, 2}
     ],
     Exports = [E || {Name, _} = E <- ides:module_info(exports), Name =/= module_info],
