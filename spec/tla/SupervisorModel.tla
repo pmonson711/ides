@@ -209,4 +209,19 @@ MonitorCrashInKillGraph ==
                            /\ ~HandlesDown[q]
                            /\ proc_state[q].state = Terminated}
     IN \A v \in victims : killed_pid \in KillGraph(v)
+
+\* Every worker's full ancestor chain must be in its computed KillGraph.
+KillGraphDeep ==
+  \A p \in {q \in Processes : IsWorker(q)} :
+    AncestorsOf(p) \subseteq KillGraph(p)
+
+\* After a supervisor reacts, any terminated supervisor-child must
+\* either have its parent terminated (escalation propagated up) or have
+\* been restarted.
+CascadeCorrect ==
+  (history.action = "SupervisorReacts") =>
+    LET sup == history.pid
+    IN \A c \in SeqToSet(ChildrenOf[sup]) :
+      (IsSupervisor(c) /\ proc_state[c].state = Terminated) =>
+      (proc_state[sup].state = Terminated \/ proc_state[c].state = Running)
 ====
