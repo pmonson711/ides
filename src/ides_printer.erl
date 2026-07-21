@@ -98,15 +98,12 @@ Like `format/2` but writes the rendered tree to stdout.
 print(TargetPid, Tree) ->
     io:put_chars(format(TargetPid, Tree)).
 
--doc #{
-    f => format_detail,
-    a => 3,
-    d =>
-        "Like `format/2` but also includes a section showing link\\n"
-        "and monitor relationships below the tree.\\n"
-        "\\n"
-        "`KillSources` is the result of `ides_march:kill_graph_detail/1`."
-}.
+-doc """
+Like `format/2` but also includes a section showing link
+and monitor relationships below the tree.
+
+`KillSources` is the result of `ides_march:kill_graph_detail/1`.
+""".
 -spec format_detail(
     TargetPid :: pid(), Tree :: ides_family:process(), KillSources :: [ides_family:kill_source()]
 ) -> iolist().

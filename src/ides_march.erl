@@ -103,16 +103,13 @@ affected_siblings(TargetPid) ->
             {error, Reason}
     end.
 
--doc #{
-    f => link_info,
-    a => 1,
-    d =>
-        "Return link information for the given process.\\n"
-        "\\n"
-        "Reports which processes are linked to `Pid` and whether\\n"
-        "`Pid` traps exits. Linked processes are potential killers\\n"
-        "if `traps_exits` is `false`."
-}.
+-doc """
+Return link information for the given process.
+
+Reports which processes are linked to `Pid` and whether
+`Pid` traps exits. Linked processes are potential killers
+if `traps_exits` is `false`.
+""".
 -spec link_info(Pid :: pid()) -> {ok, ides_family:link_info()} | {error, term()}.
 link_info(Pid) ->
     case erlang:process_info(Pid, [links, trap_exit, status]) of
@@ -127,16 +124,13 @@ link_info(Pid) ->
             {error, {unexpected_process_info, Other}}
     end.
 
--doc #{
-    f => monitor_info,
-    a => 1,
-    d =>
-        "Return monitor information for the given process.\\n"
-        "\\n"
-        "Reports which processes `Pid` is monitoring and which\\n"
-        "processes are monitoring `Pid`. Monitored processes are\\n"
-        "potential killers if `Pid` doesn't handle DOWN messages."
-}.
+-doc """
+Return monitor information for the given process.
+
+Reports which processes `Pid` is monitoring and which
+processes are monitoring `Pid`. Monitored processes are
+potential killers if `Pid` doesn't handle DOWN messages.
+""".
 -spec monitor_info(Pid :: pid()) -> {ok, ides_family:monitor_info()} | {error, term()}.
 monitor_info(Pid) ->
     case erlang:process_info(Pid, [monitors, monitored_by, status]) of
@@ -152,16 +146,13 @@ monitor_info(Pid) ->
             {error, {unexpected_process_info, Other}}
     end.
 
--doc #{
-    f => kill_graph_detail,
-    a => 1,
-    d =>
-        "Return the kill graph with each entry tagged by its kill mechanism:\\n"
-        "- `ancestor` — supervisor ancestor\\n"
-        "- `sibling` — sibling via supervisor strategy\\n"
-        "- `link` — linked process (relevant if target doesn't trap exits)\\n"
-        "- `monitor` — monitored process (relevant if target doesn't handle DOWN)"
-}.
+-doc """
+Return the kill graph with each entry tagged by its kill mechanism:
+- `ancestor` — supervisor ancestor
+- `sibling` — sibling via supervisor strategy
+- `link` — linked process (relevant if target doesn't trap exits)
+- `monitor` — monitored process (relevant if target doesn't handle DOWN)
+""".
 -spec kill_graph_detail(TargetPid :: pid()) -> {ok, [ides_family:kill_source()]} | {error, term()}.
 kill_graph_detail(TargetPid) ->
     case ides_family:get_ancestors(TargetPid) of
