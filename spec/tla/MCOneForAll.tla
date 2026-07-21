@@ -5,7 +5,7 @@
 \*   child1 child2 child3
 \*   (perm) (perm) (temp)
 
-VARIABLES clock, proc_state, restart_window, history
+VARIABLES clock, proc_state, restart_window, history, monitor_down
 
 INSTANCE SupervisorModel WITH
   Processes   <- {"root", "child1", "child2", "child3"},

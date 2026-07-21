@@ -6,7 +6,7 @@
 \*          /    \
 \*       sub1   sub2   (both workers, permanent)
 
-VARIABLES clock, proc_state, restart_window, history
+VARIABLES clock, proc_state, restart_window, history, monitor_down
 
 INSTANCE SupervisorModel WITH
   Processes   <- {"root", "sup1", "sub1", "sub2"},
