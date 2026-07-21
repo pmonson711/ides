@@ -6,12 +6,13 @@ VARIABLES clock, proc_state, restart_window, history, monitor_down
 vars == <<clock, proc_state, restart_window, history, monitor_down>>
 
 \* Per-process state record type
-ProcState == [ state : {Running, Terminated},
-               exit  : ExitReasons,
-               type  : ProcTypes ]
+ProcState == [ state      : {Running, Terminated},
+               exit       : ExitReasons,
+               type       : ProcTypes,
+               init_phase : InitPhases ]
 
 \* History record for action-level invariant checks
-HistoryRec == [ action : {"Init", "NormalTermination", "AbnormalTermination", "LinkKill", "MonitorCrash", "SupervisorReacts", "Tick"},
+HistoryRec == [ action : {"Init", "NormalTermination", "AbnormalTermination", "LinkKill", "MonitorCrash", "SupervisorReacts", "Tick", "StartChild", "InitSuccess", "InitTimeout"},
                 pid    : Processes ]
 
 TypeOK ==
@@ -26,10 +27,34 @@ Init ==
   /\ proc_state = [p \in Processes |->
        [state |-> Running,
         exit  |-> Normal,
-        type  |-> IF IsSupervisor(p) THEN SupervisorType ELSE WorkerType]]
+        type  |-> IF IsSupervisor(p) THEN SupervisorType ELSE WorkerType,
+        init_phase |-> Running]]
   /\ restart_window = [p \in Processes |-> <<>>]
   /\ history = [action |-> "Init", pid |-> Root]
   /\ monitor_down = [p \in Processes |-> {}]
+
+StartChild(sup, child) ==
+  /\ IsSupervisor(sup)
+  /\ child \in SeqToSet(ChildrenOf[sup])
+  /\ proc_state[child].init_phase = Idle
+  /\ proc_state' = [proc_state EXCEPT ![child].init_phase = Initing]
+  /\ history' = [action |-> "StartChild", pid |-> child]
+  /\ clock' = clock
+  /\ UNCHANGED <<restart_window, monitor_down>>
+
+InitSuccess(p) ==
+  /\ proc_state[p].init_phase = Initing
+  /\ proc_state' = [proc_state EXCEPT ![p].init_phase = Running]
+  /\ history' = [action |-> "InitSuccess", pid |-> p]
+  /\ clock' = clock
+  /\ UNCHANGED <<restart_window, monitor_down>>
+
+InitTimeout(p) ==
+  /\ proc_state[p].init_phase = Initing
+  /\ proc_state' = [proc_state EXCEPT ![p] = [@ EXCEPT !.state = Terminated, !.exit = Abnormal, !.init_phase = InitTimedOut]]
+  /\ history' = [action |-> "InitTimeout", pid |-> p]
+  /\ clock' = clock
+  /\ UNCHANGED <<restart_window, monitor_down>>
 
 Tick ==
   /\ clock < MaxClock
@@ -121,6 +146,9 @@ SupervisorReacts(sup) ==
                         [] OTHER -> proc_state[p]]
 
 Next ==
+  \/ \E sup \in {s \in Processes : IsSupervisor(s)} : \E child \in SeqToSet(ChildrenOf[sup]) : StartChild(sup, child)
+  \/ \E p \in Processes : InitSuccess(p)
+  \/ \E p \in Processes : InitTimeout(p)
   \/ \E p \in Processes : NormalTermination(p)
   \/ \E p \in Processes : AbnormalTermination(p)
   \/ \E p \in Processes : MonitorCrash(p)
