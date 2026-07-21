@@ -16,7 +16,7 @@
 \* supB exceeds -> supB dies -> supA (rest_for_one) cascades ->
 \* supA exceeds -> supA dies -> root restarts everything.
 
-VARIABLES clock, proc_state, restart_window, history
+VARIABLES clock, proc_state, restart_window, history, monitor_down
 
 INSTANCE SupervisorModel WITH
   Processes   <- {"root", "supA", "supB", "supC", "worker1", "worker2"},
@@ -45,5 +45,9 @@ INSTANCE SupervisorModel WITH
     [] x = "supB"    -> 3
     [] x = "supC"    -> 3
     [] OTHER         -> 0],
-  MaxClock    <- 5
+  MaxClock    <- 5,
+  Links       <- [p \in {"root", "supA", "supB", "supC", "worker1", "worker2"} |-> {}],
+  Monitors    <- [p \in {"root", "supA", "supB", "supC", "worker1", "worker2"} |-> {}],
+  TrapsExits  <- [p \in {"root", "supA", "supB", "supC", "worker1", "worker2"} |-> FALSE],
+  HandlesDown <- [p \in {"root", "supA", "supB", "supC", "worker1", "worker2"} |-> FALSE]
 ====

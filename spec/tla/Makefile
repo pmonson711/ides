@@ -11,7 +11,9 @@ MODELS := \
 	MCSimpleOneForOne \
 	MCNestedEscalation \
 	MCLinkKill \
-	MCMonitorCrash
+	MCMonitorCrash \
+	MCNestedDeep3 \
+	MCNestedDeep4
 
 .PHONY: all check $(MODELS) clean
 
