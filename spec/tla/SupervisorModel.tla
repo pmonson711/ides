@@ -252,4 +252,15 @@ CascadeCorrect ==
     IN \A c \in SeqToSet(ChildrenOf[sup]) :
       (IsSupervisor(c) /\ proc_state[c].state = Terminated) =>
       (proc_state[sup].state = Terminated \/ proc_state[c].state = Running)
+
+\* After any InitTimeout, if the parent supervisor's restart budget
+\* is exceeded, the supervisor must be terminated.
+StartupIntensityCorrect ==
+  (history.action = "InitTimeout") =>
+    LET p == history.pid
+        sup == ParentOf(p)
+        count == RestartCount(sup, restart_window, clock)
+        max_r == MaxR[sup]
+    IN (count > max_r) =>
+       proc_state[sup].state = Terminated
 ====
