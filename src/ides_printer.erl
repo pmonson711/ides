@@ -40,15 +40,7 @@ format_node(
     },
     Depth
 ) ->
-    Prefix = prefix(TargetPid, Pid, Depth),
-    Anno = [supervisor_anno(Strategy, RestartType, Pid)],
-    [
-        Prefix,
-        Name,
-        Anno,
-        "\n"
-        | [format_node(TargetPid, Child, Depth + 1) || Child <- Children]
-    ];
+    format_supervisor_node(TargetPid, Name, Pid, Depth, [supervisor_anno(Strategy, RestartType, Pid)], Children);
 format_node(
     TargetPid,
     #{
@@ -60,15 +52,7 @@ format_node(
     },
     Depth
 ) ->
-    Prefix = prefix(TargetPid, Pid, Depth),
-    Anno = [supervisor_anno(Strategy, Pid)],
-    [
-        Prefix,
-        Name,
-        Anno,
-        "\n"
-        | [format_node(TargetPid, Child, Depth + 1) || Child <- Children]
-    ];
+    format_supervisor_node(TargetPid, Name, Pid, Depth, [supervisor_anno(Strategy, Pid)], Children);
 format_node(
     TargetPid,
     #{
@@ -82,6 +66,24 @@ format_node(
     Prefix = prefix(TargetPid, Pid, Depth),
     Anno = [" (", atom_to_list(RestartType), ")"],
     [Prefix, Name, Anno, "\n"].
+
+-spec format_supervisor_node(
+    TargetPid :: pid(),
+    Name :: string(),
+    Pid :: pid(),
+    Depth :: non_neg_integer(),
+    Anno :: iolist(),
+    Children :: [ides_family:process()]
+) -> iolist().
+format_supervisor_node(TargetPid, Name, Pid, Depth, Anno, Children) ->
+    Prefix = prefix(TargetPid, Pid, Depth),
+    [
+        Prefix,
+        Name,
+        Anno,
+        "\n"
+        | [format_node(TargetPid, Child, Depth + 1) || Child <- Children]
+    ].
 
 -spec prefix(TargetPid :: pid(), Pid :: pid(), Depth :: non_neg_integer()) -> [string()].
 prefix(_TargetPid, _Pid, 0) ->
