@@ -579,22 +579,42 @@ init_analysis_format_test() ->
         ]
     },
     Output = lists:flatten(ides:format_init_analysis(Result)),
-    ?assert(string:find(Output, "Supervisor:") =/= nomatch),
-    ?assert(string:find(Output, "one_for_one") =/= nomatch),
-    ?assert(string:find(Output, "Total children: 4") =/= nomatch),
-    ?assert(string:find(Output, "Worst-case restart count: 3") =/= nomatch),
-    ?assert(string:find(Output, "worker_a") =/= nomatch),
-    ?assert(string:find(Output, "worker_b") =/= nomatch),
-    ?assert(string:find(Output, "worker_c") =/= nomatch),
-    ?assert(string:find(Output, "worker_d") =/= nomatch),
-    ?assert(string:find(Output, "permanent") =/= nomatch),
-    ?assert(string:find(Output, "transient") =/= nomatch),
-    ?assert(string:find(Output, "temporary") =/= nomatch),
-    ?assert(string:find(Output, "never restarted") =/= nomatch),
-    ?assert(string:find(Output, "shutdown=5000") =/= nomatch),
-    ?assert(string:find(Output, "shutdown=infinity") =/= nomatch),
-    ?assert(string:find(Output, "Remaining budget:") =/= nomatch),
-    ?assert(string:find(Output, "WARNING") =/= nomatch).
+    Lines = string:split(string:trim(Output, trailing, "\n"), "\n", all),
+
+    %% Header line: supervisor pid, strategy, intensity policy
+    Line1 = lists:nth(1, Lines),
+    ?assert(string:find(Line1, "Supervisor: <") =/= nomatch),
+    ?assert(string:find(Line1, "one_for_one") =/= nomatch),
+    ?assert(string:find(Line1, "max 3/5s") =/= nomatch),
+
+    %% Summary counts (positional)
+    ?assertEqual("Total children: 4", lists:nth(2, Lines)),
+    ?assertEqual("Worst-case restart count: 3", lists:nth(3, Lines)),
+
+    %% Section header (offset by blank line from format output)
+    ?assertEqual("Children:", lists:nth(5, Lines)),
+
+    %% Child entries: order-insensitive, just assert they exist with correct content
+    ChildLines = lists:sublist(Lines, 6, 4),
+    has_child(ChildLines, "* worker_c", "(transient, shutdown=infinity)"),
+    has_child(ChildLines, "  worker_a", "(permanent, shutdown=5000)"),
+    has_child(ChildLines, "  worker_b", "(transient, shutdown=5000)"),
+    has_child(ChildLines, "  worker_d", "(temporary, shutdown=5000)    never restarted"),
+
+    %% Footer is the last line
+    Footer = lists:last(Lines),
+    ?assert(string:find(Footer, "Remaining budget: 2") =/= nomatch),
+    ?assert(string:find(Footer, "Worst case: 3") =/= nomatch),
+    ?assert(string:find(Footer, "WARNING") =/= nomatch).
+
+has_child(Lines, Marker, Anno) ->
+    true = lists:any(
+        fun(Line) ->
+            string:find(Line, Marker) =/= nomatch andalso
+                string:find(Line, Anno) =/= nomatch
+        end,
+        Lines
+    ).
 
 init_analysis_format_no_children_test() ->
     SupPid = spawn(fun() -> ok end),
@@ -610,9 +630,16 @@ init_analysis_format_no_children_test() ->
         children => []
     },
     Output = lists:flatten(ides:format_init_analysis(Result)),
-    ?assert(string:find(Output, "Total children: 0") =/= nomatch),
-    ?assert(string:find(Output, "Worst-case restart count: 0") =/= nomatch),
-    ?assert(string:find(Output, "Remaining budget:") =/= nomatch).
+    Lines = string:split(string:trim(Output, trailing, "\n"), "\n", all),
+
+    ?assertEqual("Total children: 0", lists:nth(2, Lines)),
+    ?assertEqual("Worst-case restart count: 0", lists:nth(3, Lines)),
+
+    %% No warning when within budget
+    Footer = lists:last(Lines),
+    ?assert(string:find(Footer, "Remaining budget: 1") =/= nomatch),
+    ?assert(string:find(Footer, "Worst case: 0") =/= nomatch),
+    ?assert(string:find(Footer, "WARNING") =:= nomatch).
 
 init_analysis_integration_test_() ->
     {setup,
