@@ -234,12 +234,7 @@ init_analysis(Pid) ->
     case ides_family:parent_info(Pid) of
         {ok, #{sup_pid := SupPid, sup_strategy := Strategy, child_pids := ChildPids}} ->
             Children = build_children(SupPid, ChildPids),
-            IntensityResult = intensity_info(SupPid),
-            Intensity =
-                case IntensityResult of
-                    {ok, Info} -> Info;
-                    _ -> #{max_restarts => 1, max_period => 5}
-                end,
+            {ok, Intensity} = intensity_info(SupPid),
             WorstCase = length([1 || #{counts_against_intensity := true} <- Children]),
             Budget =
                 maps:get(max_restarts, Intensity) -
