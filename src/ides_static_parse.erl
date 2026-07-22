@@ -17,6 +17,7 @@
 
 -export_type([sup_flags/0, child_spec/0]).
 
+-doc "Parse init/1 function from beam_info, extracting SupFlags and ChildSpecs.".
 -spec parse_init(ides_static_beam:beam_info()) ->
     {ok, sup_flags(), [child_spec()]} | {error, term()}.
 

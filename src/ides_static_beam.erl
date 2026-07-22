@@ -13,6 +13,8 @@
 
 -export_type([beam_info/0]).
 
+-doc "Return true if the module declares `-behaviour(supervisor)`.".
+-spec is_supervisor(beam_info()) -> boolean().
 is_supervisor(#{attributes := Attrs}) ->
     lists:any(
         fun({behaviour, Behaviours}) ->
@@ -23,6 +25,8 @@ is_supervisor(#{attributes := Attrs}) ->
         Attrs
     ).
 
+-doc "Load BEAM files and return metadata indexed by module name.".
+-spec load_beams([file:filename()]) -> {ok, #{module() => beam_info()}}.
 load_beams(Paths) ->
     Results = lists:foldl(fun load_beam/2, #{}, Paths),
     {ok, Results}.
@@ -47,14 +51,12 @@ load_beam(Path, Acc) ->
     end.
 
 extract_abstract_code(Chunks) ->
-    %% Try abstract_code chunk first
     case proplists:get_value(abstract_code, Chunks) of
         {raw_abstract_v1, Code} ->
             {ok, Code};
         Code when is_list(Code) ->
             {ok, Code};
         _ ->
-            %% Try debug_info chunk
             case proplists:get_value(debug_info, Chunks) of
                 {erl_abstract_code, Forms} when is_list(Forms) ->
                     {ok, Forms};

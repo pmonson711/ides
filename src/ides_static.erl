@@ -57,6 +57,8 @@
                         | {dynamic_child_spec, module()}
                         | {missing_behaviour, module()}.
 
+-doc "Build the static supervision tree from BEAM files."
+      "Returns tree roots and any warnings (unresolvable modules, dynamic children).".
 -spec supervisor_tree([file:filename()]) ->
     {ok, #{tree := [static_process()], warnings := [static_warning()]}} | {error, static_error()}.
 
@@ -170,6 +172,7 @@ build_child(Child, BeamMap) ->
             }, Warns}
     end.
 
+-doc "Return restart intensity policy for a supervisor module.".
 -spec intensity_info(module(), [file:filename()]) ->
     {ok, intensity_info()} | {error, static_error()}.
 
@@ -195,6 +198,7 @@ intensity_info(Module, BeamPaths) ->
             {error, {missing_beam, Module}}
     end.
 
+-doc "Return all modules that could cause the target module's process to be killed.".
 -spec kill_graph(module(), [file:filename()]) ->
     {ok, [module()]} | {error, static_error()}.
 
@@ -242,6 +246,7 @@ find_killers_in_node(Module, #{type := supervisor, children := Children} = Sup, 
 find_killers_in_node(_Module, _Node, _Ancestors) ->
     [].
 
+-doc "Return the ancestor supervisor chain for a module, from root to direct parent.".
 -spec ancestors(module(), [file:filename()]) ->
     {ok, [module()]} | {error, static_error()}.
 
@@ -272,6 +277,7 @@ find_ancestors_path(Module, #{type := supervisor, module := Mod, children := Chi
 find_ancestors_path(_Module, _Node) ->
     [].
 
+-doc "Return sibling modules (other children of the same parent supervisor).".
 -spec siblings(module(), [file:filename()]) ->
     {ok, [module()]} | {error, static_error()}.
 
@@ -299,6 +305,7 @@ find_siblings_in_trees(Module, [#{children := Children} | _] = Trees) ->
 find_siblings_in_trees(_Module, _Nodes) ->
     [].
 
+-doc "Render the supervision tree as indented ASCII, marking the target with `*`.".
 -spec format(module(), [static_process()]) -> iolist().
 
 format(Module, Trees) ->
@@ -327,11 +334,13 @@ format_prefix(Module, #{module := Module}, Depth) ->
 format_prefix(_Module, _Node, Depth) ->
     lists:duplicate(Depth * 4 - 2, $\s) ++ "  ".
 
+-doc "Like `format/2` but writes to stdout.".
 -spec print(module(), [static_process()]) -> ok.
 
 print(Module, Trees) ->
     io:put_chars(format(Module, Trees)).
 
+-doc "Look up a module by its registered process name in the tree.".
 -spec find_process_by_name(string(), [static_process()]) -> {ok, module()} | {error, not_found}.
 
 find_process_by_name(Name, Trees) ->
