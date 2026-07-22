@@ -219,7 +219,6 @@ walk_down(RootPid, TargetPid) ->
             try walk_supervisor(RootPid, TargetPid) of
                 Tree -> {ok, Tree}
             catch
-                throw:Reason -> {error, Reason};
                 error:Reason -> {error, Reason};
                 exit:Reason -> {error, {exit, Reason}}
             end
@@ -266,8 +265,8 @@ walk_child(SupPid, {Id, ChildPid, supervisor, _Modules}, TargetPid) when is_pid(
     RestartType = get_restart_type(SupPid, Id),
     ChildTree = walk_supervisor(ChildPid, TargetPid),
     ChildTree#{restart_type => RestartType};
-walk_child(_SupPid, {Id, _ChildPid, _Type, _Modules}, _TargetPid) ->
-    throw({unexpected_child_state, Id, _ChildPid}).
+walk_child(_SupPid, {Id, ChildPid, _Type, _Modules}, _TargetPid) ->
+    error({unexpected_child_state, Id, ChildPid}).
 
 -spec get_name(Pid :: pid()) -> string().
 get_name(Pid) ->

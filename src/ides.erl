@@ -52,7 +52,10 @@ Uses OTP primitives: `erlang:process_info/2` for `$ancestors`,
     supervisor_strategy/0,
     child_restart_type/0,
     exit_reason/0,
-    intensity_info/0
+    intensity_info/0,
+    kill_source/0,
+    link_info/0,
+    monitor_info/0
 ]).
 
 -spec ancestors(TargetPid :: pid()) -> {ok, process()} | {error, term()}.
