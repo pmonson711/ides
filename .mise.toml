@@ -3,3 +3,26 @@ erlang = "28"
 java = "latest"
 "github:WhatsApp/erlang-language-platform" = "latest"
 rebar = "latest"
+
+[tasks.all]
+depends = ["build", "test", "lint"]
+
+[tasks.build]
+run = "rebar3 xref"
+
+[tasks.test]
+depends = ["test:unit", "test:example"]
+
+[tasks.model]
+dir = "spec/tla/"
+run = "make"
+
+[tasks.lint]
+run = "rebar3 lint"
+
+[tasks."test:unit"]
+run = "rebar3 eunit"
+
+[tasks."test:example"]
+dir = "examples/demo_app/"
+run = "rebar3 ct"
