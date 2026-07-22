@@ -219,6 +219,8 @@ RestartTypeCorrect ==
     IN
     /\ \A c \in {c \in children_set : RestartType[c] = Permanent} :
          proc_state[c].state = Running \/ proc_state[sup].state = Terminated
+    /\ \A c \in {c \in children_set : RestartType[c] = Transient} :
+         proc_state[c].state = Running \/ proc_state[sup].state = Terminated \/ proc_state[c].exit = Normal
     /\ \A c \in {c \in children_set : RestartType[c] = Temporary} :
          proc_state[c].state = Terminated \/ proc_state[sup].state = Terminated
 
