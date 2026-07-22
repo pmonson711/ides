@@ -3,12 +3,11 @@
 -include_lib("eunit/include/eunit.hrl").
 
 compile_test_beam(ModuleName, SourceBody) ->
-    SrcFile = filename:join(["test", "support", atom_to_list(ModuleName) ++ ".erl"]),
+    SrcFile = filename:join(["priv", "support", atom_to_list(ModuleName) ++ ".erl"]),
     ok = file:write_file(SrcFile, SourceBody),
-    {ok, _Mod, Beam} = compile:file(SrcFile, [debug_info, binary, report, {outdir, "test/support"}]),
-    BeamFile = filename:rootname(SrcFile) ++ ".beam",
-    ok = file:write_file(BeamFile, Beam),
-    {ok, #{ModuleName := Info}} = ides_static_beam:load_beams([BeamFile]),
+    {ok, _Mod, Beam} = compile:file(SrcFile, [debug_info, binary, report, return_errors]),
+    file:delete(SrcFile),
+    {ok, #{ModuleName := Info}} = ides_static_beam:load_beams([Beam]),
     Info.
 
 parse_one_for_one_sup_flags_test() ->
