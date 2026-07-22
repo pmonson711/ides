@@ -278,7 +278,7 @@ get_name(Pid) ->
                 {proc_lib, init_p, 5} ->
                     case erlang:process_info(Pid, initial_call) of
                         {initial_call, {M, F, A}} ->
-                            lists:flatten(io_lib:format("~s:~s/~B", [M, F, A]));
+                            format_mfa(M, F, A);
                         _ ->
                             pid_to_list(Pid)
                     end;
@@ -288,6 +288,10 @@ get_name(Pid) ->
                     pid_to_list(Pid)
             end
     end.
+
+-spec format_mfa(M :: atom(), F :: atom(), A :: non_neg_integer()) -> string().
+format_mfa(M, F, A) ->
+    lists:flatten(io_lib:format("~s:~s/~B", [M, F, A])).
 
 -spec get_strategy(SupPid :: pid()) -> supervisor_strategy().
 get_strategy(SupPid) ->
