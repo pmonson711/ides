@@ -18,4 +18,5 @@ child_init(_Parent) ->
     proc_lib:init_ack({ok, self()}),
     receive
         stop -> ok
+    after 10000 -> ok
     end.
