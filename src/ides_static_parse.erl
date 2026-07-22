@@ -1,5 +1,37 @@
 -module(ides_static_parse).
 
+-moduledoc """
+Static analysis of supervisor `init/1` functions from BEAM abstract code.
+
+## Recognized patterns
+
+The parser handles the most common OTP supervisor patterns:
+
+- **Literal SupFlags map** — `#{strategy => one_for_one, intensity => 3, period => 10}`
+- **Variable-bound SupFlags** — `SupFlags = #{...}` followed by `{ok, {SupFlags, Children}}`
+- **Literal child spec list** — `[#{id => w1, start => {M,F,A}, restart => permanent, type => worker}]`
+- **Variable-bound child specs** — `ChildSpec = #{...}, {ok, {SupFlags, [ChildSpec]}}`
+- **Variable-bound children list** — `Children = [...], {ok, {SupFlags, Children}}`
+
+## Unrecognized patterns (return errors)
+
+These patterns cannot be analyzed statically and produce `{error, Reason}`:
+
+- **Dynamic SupFlags** — strategy/intensity/period derived from function calls or
+  `application:get_env` at runtime
+- **Dynamic children** — child specs built from function calls, list comprehensions
+  over runtime data, or `ets` lookups
+- **Conditional children** — `if`/`case` expressions in the return value selecting
+  between different child spec lists
+- **MFA dispatch** — `apply(M, F, A)` patterns or dynamic module names
+- **No abstract code** — BEAM file compiled without `debug_info`
+
+## Error handling
+
+`parse_init/1` returns `{ok, SupFlags, [ChildSpec]}` on success, or
+`{error, Reason}` on failure. Callers should handle the error case.
+""".
+
 -export([parse_init/1]).
 
 -type sup_flags() :: #{

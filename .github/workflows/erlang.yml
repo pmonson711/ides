@@ -24,6 +24,9 @@ jobs:
         persist-credentials: false
     - name: Compile
       run: rebar3 compile
+    - name: Compile Example
+      working-directory: ./examples/demo_app/
+      run: rebar3 compile
     - name: Run tests
       run: rebar3 do xref, eunit, ct, lint
     - name: Run Examples
