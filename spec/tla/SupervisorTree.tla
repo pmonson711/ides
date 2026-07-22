@@ -1,6 +1,27 @@
 ---- MODULE SupervisorTree ----
 EXTENDS Naturals, Sequences, FiniteSets, TLC
 
+(*
+  SupervisorTree — Static configuration for the Erlang supervisor model.
+
+  This module defines the "language" of the model:
+  - Constants (supplied by TLC config files via MC*.tla INSTANCE)
+  - Type enums (strategies, restart types, exit reasons, process types)
+  - Derived tree helpers (ParentOf, AncestorsOf, SiblingsOf)
+  - Safety analyses (KillGraph, AffectedChildren, ShouldRestart)
+
+  All computations in this module are pure — they depend only on
+  the static constants, not on the dynamic state (proc_state, clock, etc.).
+  That state lives in SupervisorModel.tla.
+
+  KillGraph(P) is the key analysis: it computes all processes whose
+  termination could cause P to die, combining four Erlang mechanisms:
+    1. Ancestors — escalation from intensity overflow
+    2. Strategy-dependent siblings — one_for_all / rest_for_one cascades
+    3. Linked processes — exit signal propagation (LinkKillersOf)
+    4. Monitored processes — DOWN message propagation (MonitorKillersOf)
+*)
+
 \* Process states
 Running    == "running"
 Terminated == "terminated"
@@ -109,15 +130,23 @@ MonitorKillersOf(p) ==
   THEN {}
   ELSE Monitors[p]
 
-\* Kill graph: all processes whose termination could cause P to die.
-\*   - P's parent can always kill P
-\*   - Under OneForAll, any sibling's death kills all siblings
-\*   - Under RestForOne, any sibling at a lower index whose death
-\*     triggers a cascade kills P
-\*   - Under OneForOne / SimpleOneForOne, siblings don't affect each other
-\*   - Any ancestor can kill P via restart-intensity escalation propagating down
-\*   - Linked processes kill P if P doesn't trap exits
-\*   - Monitored processes kill P if P doesn't handle DOWN messages
+(*
+  KillGraph(P) — All processes whose termination could cause P to die.
+
+  Four sources of kill:
+    1. Ancestors: any ancestor that exceeds its restart intensity
+       terminates itself, killing everything in its subtree.
+    2. Strategy-dependent siblings:
+       - OneForAll: any sibling's death kills all siblings
+       - RestForOne: a sibling at a strictly lower index whose death
+         triggers a cascade kills P
+       - OneForOne / SimpleOneForOne: siblings don't affect each other
+    3. Link propagation: if P is linked to a process that dies
+       abnormally, P receives an exit signal. If P doesn't trap exits,
+       P also dies (LinkKillersOf).
+    4. Monitor/DOWN: if P monitors a process that dies, P receives a
+       DOWN message. If P doesn't handle DOWN, P crashes (MonitorKillersOf).
+*)
 KillGraph(P) ==
   LET sup       == ParentOf(P)
       strat     == Strategy[sup]

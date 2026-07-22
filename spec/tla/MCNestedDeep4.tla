@@ -51,4 +51,7 @@ INSTANCE SupervisorModel WITH
   TrapsExits  <- [p \in {"root", "supA", "supB", "supC", "worker1", "worker2"} |-> FALSE],
   HandlesDown <- [p \in {"root", "supA", "supB", "supC", "worker1", "worker2"} |-> FALSE]
 ASSUME KillGraphDeep
+\* Exercises: 4-level deep chain, stress-testing full-depth cascade
+\* through one_for_one -> rest_for_one -> one_for_all -> one_for_one.
+\* Verifies escalation propagates and each level restarts correctly.
 ====

@@ -22,4 +22,6 @@ INSTANCE SupervisorModel WITH
   TrapsExits  <- [p \in {"root", "sup1", "sub1", "sub2"} |-> FALSE],
   HandlesDown <- [p \in {"root", "sup1", "sub1", "sub2"} |-> FALSE]
 ASSUME KillGraphDeep
+\* Exercises: Nested supervisors (OneForAll under OneForOne),
+\* intensity escalation — sup1 exceeds MaxR and dies, root restarts.
 ====

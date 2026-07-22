@@ -1,6 +1,38 @@
 ---- MODULE SupervisorModel ----
 EXTENDS Naturals, Sequences, SupervisorTree
 
+(*
+  SupervisorModel — Dynamic state machine for the Erlang supervisor model.
+
+  Models Erlang/OTP supervisor behavior as a TLA+ next-state relation
+  with five actions and a set of invariants:
+
+  Actions (corresponding to real Erlang mechanisms):
+    NormalTermination(p)   — Process exits with reason normal
+    AbnormalTermination(p) — Process crashes with abnormal exit;
+                              link victims killed in the same step
+    LinkKill(p)            — Link propagation: partner of a dead
+                              process dies if it doesn't trap exits
+    MonitorCrash(p)        — Monitor/DOWN: process dies if it
+                              doesn't handle DOWN from a monitored process
+    SupervisorReacts(sup)  — Supervisor restarts terminated children
+                              per strategy, restart type, and
+                              intensity limits; terminates itself
+                              and children on intensity overflow
+
+  State variables:
+    clock          — Monotonic tick, bounded at MaxClock
+    proc_state     — Per-process: Running/Terminated, exit reason, type
+    restart_window — Per-supervisor: sequence of restart timestamps
+    history        — Last action taken (for action-level invariants)
+    monitor_down   — Per-process: set of monitored processes known down
+
+  Invariants (see inline comments for what each catches):
+    TypeOK, TreeWellFormed, RestartTypeCorrect, StrategySemantics,
+    IntensityEscalation, KillGraphCorrect, LinkPropagationCorrect,
+    MonitorCrashInKillGraph, KillGraphDeep, CascadeCorrect
+*)
+
 VARIABLES clock, proc_state, restart_window, history, monitor_down
 
 vars == <<clock, proc_state, restart_window, history, monitor_down>>
@@ -115,10 +147,15 @@ MonitorCrash(p) ==
         /\ UNCHANGED <<restart_window, monitor_down>>
 
 SupervisorReacts(sup) ==
+  (* --- Step 1: Affected children — which children this supervisor must act on,
+      determined by strategy (see AffectedChildren in SupervisorTree.tla) --- *)
   LET children_set  == SeqToSet(ChildrenOf[sup])
       terminated    == {c \in children_set : proc_state[c].state = Terminated}
   IN /\ IsSupervisor(sup)
      /\ terminated # {}
+     (* --- Step 2: Restart eligibility and intensity check.
+         ShouldRestart filters affected children by restart type.
+         The restart_window check decides: normal restart vs escalation crash. --- *)
      /\ LET affected    == AffectedChildren(sup, terminated)
             to_restart  == {c \in affected : ShouldRestart(c, proc_state)}
             \* Children the supervisor kills (were running, now terminated by supervisor)
@@ -126,6 +163,9 @@ SupervisorReacts(sup) ==
          IN /\ clock' = clock
             /\ monitor_down' = monitor_down
             /\ history' = [action |-> "SupervisorReacts", pid |-> sup]
+            (* --- Step 3: State update — either restart+kill children normally,
+                or if intensity exceeded, terminate the supervisor and all children
+                (escalation to parent). --- *)
            /\ IF Len(restart_window[sup]) + Cardinality(to_restart) > MaxR[sup]
               THEN \* Restart intensity exceeded: supervisor terminates all children and itself
                    /\ restart_window' = restart_window
@@ -168,6 +208,10 @@ TreeWellFormed ==
   /\ \A p \in Processes : Root \notin SeqToSet(ChildrenOf[p])
   /\ \A p \in Processes : p = Root \/ Root \in AncestorsOf(p)
 
+\* INVARIANT: Permanent children must always be Running while their
+\* supervisor is Running.  Transient children only restart on Abnormal
+\* exit.  Temporary children never restart.
+\* Catches: a supervisor failing to restart a child per its restart type.
 RestartTypeCorrect ==
   (history.action = "SupervisorReacts") =>
     LET sup == history.pid
@@ -175,9 +219,18 @@ RestartTypeCorrect ==
     IN
     /\ \A c \in {c \in children_set : RestartType[c] = Permanent} :
          proc_state[c].state = Running \/ proc_state[sup].state = Terminated
+    /\ \A c \in {c \in children_set : RestartType[c] = Transient} :
+         proc_state[c].state = Running \/ proc_state[sup].state = Terminated \/ proc_state[c].exit = Normal
     /\ \A c \in {c \in children_set : RestartType[c] = Temporary} :
          proc_state[c].state = Terminated \/ proc_state[sup].state = Terminated
 
+\* INVARIANT: After a supervisor reacts, its children respect the
+\* supervisor's restart strategy:
+\*   OneForAll — all children are Running or don't need restart
+\*   RestForOne — if a child at index i is Terminated and shouldn't
+\*     restart, all children before it are also Terminated (cascade)
+\*   OneForOne/SimpleOneForOne — terminated children don't need restart
+\* Catches: incorrect cascade logic or missed restarts per strategy.
 StrategySemantics ==
   (history.action = "SupervisorReacts") =>
     LET sup == history.pid
@@ -202,11 +255,19 @@ StrategySemantics ==
          (proc_state[c].state = Terminated) =>
          ~ShouldRestart(c, proc_state))
 
+\* INVARIANT: No Running supervisor has exceeded its restart intensity
+\* (MaxR restarts within MaxT ticks).  If a supervisor would exceed,
+\* it must be Terminated (escalated to its parent).
+\* Catches: a supervisor exceeding intensity but remaining alive.
 IntensityEscalation ==
   \A sup \in {s \in Processes : IsSupervisor(s)} :
     (proc_state[sup].state = Running) =>
     (Len(restart_window[sup]) <= MaxR[sup])
 
+\* INVARIANT: Any child killed by a supervisor reaction (Abnormal exit)
+\* must have some process in its KillGraph that terminated first.
+\* Catches: a supervisor killing a child that wasn't vulnerable
+\* (no kill-graph trigger fired).
 KillGraphCorrect ==
   (history.action = "SupervisorReacts") =>
     LET sup     == history.pid
@@ -219,8 +280,10 @@ KillGraphCorrect ==
       \E killer \in KillGraph(p) :
         proc_state[killer].state = Terminated
 
-\* Linked non-trapping processes must be terminated when their
-\* linked partner dies abnormally.
+\* INVARIANT: After a process dies abnormally, all linked non-trapping
+\* processes must be Terminated.
+\* Catches: missed link propagation — a linked process surviving a
+\* partner's abnormal death without trapping exits.
 LinkPropagationCorrect ==
   (history.action = "AbnormalTermination") =>
     LET p == history.pid
@@ -228,8 +291,10 @@ LinkPropagationCorrect ==
       (q \in Links[p] /\ q /= p /\ ~TrapsExits[q]) =>
       proc_state[q].state = Terminated
 
-\* If a monitoring process crashes due to unhandled DOWN, the
-\* monitored process must be in its kill graph.
+\* INVARIANT: Processes that crash from unhandled DOWN must have the
+\* dead monitored process in their kill graph.
+\* Catches: monitor/DOWN propagation killing a process that shouldn't
+\* have been vulnerable (e.g., it handled DOWN).
 MonitorCrashInKillGraph ==
   (history.action = "MonitorCrash") =>
     LET killed_pid == history.pid
@@ -238,14 +303,18 @@ MonitorCrashInKillGraph ==
                            /\ proc_state[q].state = Terminated}
     IN \A v \in victims : killed_pid \in KillGraph(v)
 
-\* Every worker's full ancestor chain must be in its computed KillGraph.
+\* INVARIANT: Every worker's full ancestor chain is in its KillGraph.
+\* Catches: a worker missing ancestors from its kill graph, which
+\* would mean escalation from above can't reach it in the analysis.
 KillGraphDeep ==
   \A p \in {q \in Processes : IsWorker(q)} :
     AncestorsOf(p) \subseteq KillGraph(p)
 
-\* After a supervisor reacts, any terminated supervisor-child must
-\* either have its parent terminated (escalation propagated up) or have
-\* been restarted.
+\* INVARIANT: After a supervisor reacts, any terminated supervisor-child
+\* must either have its parent terminated (escalation propagated up) or
+\* have been restarted back to Running.
+\* Catches: a terminated peer supervisor stuck dead — the parent should
+\* have either escalated or restarted it.
 CascadeCorrect ==
   (history.action = "SupervisorReacts") =>
     LET sup == history.pid
