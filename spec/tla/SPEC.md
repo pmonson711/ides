@@ -76,21 +76,6 @@ for the **ides** application.
 | `MCLinkKill.tla` | Link propagation: partially linked workers with mixed trap-exit settings |
 | `MCMonitorCrash.tla` | Monitor/DOWN cascade: chain of monitored processes with mixed handle-DOWN settings |
 
-## How to Run TLC
-
-Install the TLA+ Toolbox and run from `spec/tla/`:
-
-```sh
-# Shallow trees (fast)
-mise exec -- java -cp tla2tools.jar tlc2.TLC MCOneForOne.tla
-
-# Line counts show state-space size. Shallow configs finish
-# quickly (<100 states); deep configs may need -workers N.
-
-# Nested/deep trees
-mise exec -- java -cp tla2tools.jar tlc2.TLC -workers 4 MCNestedDeep4.tla
-```
-
 ## Modeling Notes
 
 **What's modeled:**
