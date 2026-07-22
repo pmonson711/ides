@@ -23,7 +23,22 @@ is_supervisor(#{attributes := Attrs}) ->
         Attrs
     ).
 
-load_beams(Paths) ->
+load_beams(Path) when is_list(Path), Path =/= [], is_integer(hd(Path)) ->
+    case filelib:is_dir(Path) of
+        true ->
+            BeamFiles = filelib:wildcard(filename:join(Path, "*.beam")),
+            do_load_beams(BeamFiles);
+        false ->
+            do_load_beams([Path])
+    end;
+load_beams(Paths) when is_list(Paths) ->
+    do_load_beams(Paths);
+load_beams(_Bin) when is_binary(_Bin) ->
+    do_load_beams([_Bin]);
+load_beams(_) ->
+    {ok, #{}}.
+
+do_load_beams(Paths) ->
     Results = lists:foldl(fun load_beam/2, #{}, Paths),
     {ok, Results}.
 
