@@ -283,7 +283,7 @@ get_name(Pid) ->
                             pid_to_list(Pid)
                     end;
                 {M, F, A} ->
-                    lists:flatten(io_lib:format("~s:~s/~B", [M, F, A]));
+                    format_mfa(M, F, A);
                 _Other ->
                     pid_to_list(Pid)
             end

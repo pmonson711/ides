@@ -40,7 +40,9 @@ format_node(
     },
     Depth
 ) ->
-    format_supervisor_node(TargetPid, Name, Pid, Depth, [supervisor_anno(Strategy, RestartType, Pid)], Children);
+    format_supervisor_node(
+        TargetPid, Name, Pid, Depth, [supervisor_anno(Strategy, RestartType, Pid)], Children
+    );
 format_node(
     TargetPid,
     #{
