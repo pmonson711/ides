@@ -242,7 +242,7 @@ child_killers(Module, Children, Ancestors) ->
     ).
 
 killer_siblings_for(one_for_all, Module, Children) ->
-    [maps:get(module, C) || C <- Children, maps:get(module, C) =/= Module];
+    child_modules_except(Module, Children);
 killer_siblings_for(rest_for_one, Module, Children) ->
     {Before, _} = lists:splitwith(
         fun(C) -> maps:get(module, C) =/= Module end,
@@ -254,6 +254,9 @@ killer_siblings_for(_, _Module, _Children) ->
 
 has_child(Module, Children) ->
     lists:any(fun(C) -> maps:get(module, C) =:= Module end, Children).
+
+child_modules_except(Module, Children) ->
+    [maps:get(module, C) || C <- Children, maps:get(module, C) =/= Module].
 
 -doc "Return the ancestor supervisor chain for a module, from root to direct parent.".
 -spec ancestors(module(), [file:filename()]) ->
@@ -304,7 +307,7 @@ find_siblings(Module, Trees) ->
 find_siblings_in_trees(Module, [#{children := Children} | _] = Trees) ->
     case has_child(Module, Children) of
         true ->
-            [maps:get(module, C) || C <- Children, maps:get(module, C) =/= Module];
+            child_modules_except(Module, Children);
         false ->
             lists:flatmap(
                 fun(#{children := Cs}) -> find_siblings_in_trees(Module, Cs) end,
