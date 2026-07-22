@@ -13,6 +13,10 @@ run = "rebar3 xref"
 [tasks.test]
 depends = ["test:unit", "test:example"]
 
+[tasks.model]
+dir = "spec/tla/"
+run = "make"
+
 [tasks.lint]
 run = "rebar3 lint"
 
