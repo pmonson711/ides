@@ -12,7 +12,9 @@
     link_info/0,
     monitor_info/0,
     kill_source/0,
-    intensity_info/0
+    intensity_info/0,
+    init_analysis_result/0,
+    child_init_info/0
 ]).
 
 -doc "Restart strategy of a supervisor.".
@@ -88,6 +90,28 @@ supervisor, `restart_type` is present.
     max_period := non_neg_integer(),
     current_count => non_neg_integer(),
     remaining => non_neg_integer()
+}.
+
+-doc "Result of init_analysis/1 — worst-case startup restart assessment.".
+-type init_analysis_result() :: #{
+    supervisor := pid(),
+    sup_strategy := supervisor_strategy(),
+    sup_intensity := intensity_info(),
+    target_pid := pid(),
+    total_children := non_neg_integer(),
+    children := [child_init_info()],
+    worst_case_restarts := non_neg_integer(),
+    remaining_budget := integer()
+}.
+
+-doc "Per-child init analysis info.".
+-type child_init_info() :: #{
+    id := term(),
+    pid := pid() | undefined,
+    restart_type := child_restart_type(),
+    shutdown := timeout(),
+    phase := running | restarting | undefined,
+    counts_against_intensity := boolean()
 }.
 
 %% Internal helpers exported for sibling modules
@@ -195,7 +219,6 @@ walk_down(RootPid, TargetPid) ->
             try walk_supervisor(RootPid, TargetPid) of
                 Tree -> {ok, Tree}
             catch
-                throw:Reason -> {error, Reason};
                 error:Reason -> {error, Reason};
                 exit:Reason -> {error, {exit, Reason}}
             end
@@ -242,8 +265,8 @@ walk_child(SupPid, {Id, ChildPid, supervisor, _Modules}, TargetPid) when is_pid(
     RestartType = get_restart_type(SupPid, Id),
     ChildTree = walk_supervisor(ChildPid, TargetPid),
     ChildTree#{restart_type => RestartType};
-walk_child(_SupPid, {Id, _ChildPid, _Type, _Modules}, _TargetPid) ->
-    throw({unexpected_child_state, Id, _ChildPid}).
+walk_child(_SupPid, {Id, ChildPid, _Type, _Modules}, _TargetPid) ->
+    error({unexpected_child_state, Id, ChildPid}).
 
 -spec get_name(Pid :: pid()) -> string().
 get_name(Pid) ->

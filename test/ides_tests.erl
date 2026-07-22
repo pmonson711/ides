@@ -11,6 +11,8 @@ exports_test() ->
         {ancestors, 1},
         {format, 2},
         {format_detail, 3},
+        {format_init_analysis, 1},
+        {init_analysis, 1},
         {kill_graph, 1},
         {kill_graph_detail, 1},
         {link_info, 1},
@@ -18,6 +20,7 @@ exports_test() ->
         {intensity_info, 1},
         {print, 2},
         {print_detail, 3},
+        {print_init_analysis, 1},
         {should_restart, 2}
     ],
     Exports = [E || {Name, _} = E <- ides:module_info(exports), Name =/= module_info],
@@ -528,6 +531,175 @@ intensity_info_dead_process_test() ->
     {ok, Info} = ides:intensity_info(Pid),
     ?assertEqual(1, maps:get(max_restarts, Info)),
     ?assertEqual(5, maps:get(max_period, Info)).
+
+init_analysis_format_test() ->
+    TargetPid = spawn(fun() -> ok end),
+    SupPid = spawn(fun() -> ok end),
+    Result = #{
+        supervisor => SupPid,
+        sup_strategy => one_for_one,
+        sup_intensity => #{max_restarts => 3, max_period => 5, current_count => 1, remaining => 2},
+        target_pid => TargetPid,
+        total_children => 4,
+        worst_case_restarts => 3,
+        remaining_budget => 2,
+        children => [
+            #{
+                id => worker_a,
+                pid => spawn(fun() -> ok end),
+                restart_type => permanent,
+                shutdown => 5000,
+                phase => running,
+                counts_against_intensity => true
+            },
+            #{
+                id => worker_b,
+                pid => spawn(fun() -> ok end),
+                restart_type => transient,
+                shutdown => 5000,
+                phase => running,
+                counts_against_intensity => true
+            },
+            #{
+                id => worker_c,
+                pid => TargetPid,
+                restart_type => transient,
+                shutdown => infinity,
+                phase => running,
+                counts_against_intensity => true
+            },
+            #{
+                id => worker_d,
+                pid => spawn(fun() -> ok end),
+                restart_type => temporary,
+                shutdown => 5000,
+                phase => running,
+                counts_against_intensity => false
+            }
+        ]
+    },
+    Output = lists:flatten(ides:format_init_analysis(Result)),
+    Lines = string:split(string:trim(Output, trailing, "\n"), "\n", all),
+
+    %% Header line: supervisor pid, strategy, intensity policy
+    Line1 = lists:nth(1, Lines),
+    ?assert(string:find(Line1, "Supervisor: <") =/= nomatch),
+    ?assert(string:find(Line1, "one_for_one") =/= nomatch),
+    ?assert(string:find(Line1, "max 3/5s") =/= nomatch),
+
+    %% Summary counts (positional)
+    ?assertEqual("Total children: 4", lists:nth(2, Lines)),
+    ?assertEqual("Worst-case restart count: 3", lists:nth(3, Lines)),
+
+    %% Section header (offset by blank line from format output)
+    ?assertEqual("Children:", lists:nth(5, Lines)),
+
+    %% Child entries: order-insensitive, just assert they exist with correct content
+    ChildLines = lists:sublist(Lines, 6, 4),
+    has_child(ChildLines, "* worker_c", "(transient, shutdown=infinity)"),
+    has_child(ChildLines, "  worker_a", "(permanent, shutdown=5000)"),
+    has_child(ChildLines, "  worker_b", "(transient, shutdown=5000)"),
+    has_child(ChildLines, "  worker_d", "(temporary, shutdown=5000)    never restarted"),
+
+    %% Footer is the last line
+    Footer = lists:last(Lines),
+    ?assert(string:find(Footer, "Remaining budget: 2") =/= nomatch),
+    ?assert(string:find(Footer, "Worst case: 3") =/= nomatch),
+    ?assert(string:find(Footer, "WARNING") =/= nomatch).
+
+has_child(Lines, Marker, Anno) ->
+    true = lists:any(
+        fun(Line) ->
+            string:find(Line, Marker) =/= nomatch andalso
+                string:find(Line, Anno) =/= nomatch
+        end,
+        Lines
+    ).
+
+init_analysis_format_no_children_test() ->
+    SupPid = spawn(fun() -> ok end),
+    TargetPid = spawn(fun() -> ok end),
+    Result = #{
+        supervisor => SupPid,
+        sup_strategy => one_for_one,
+        sup_intensity => #{max_restarts => 1, max_period => 5},
+        target_pid => TargetPid,
+        total_children => 0,
+        worst_case_restarts => 0,
+        remaining_budget => 1,
+        children => []
+    },
+    Output = lists:flatten(ides:format_init_analysis(Result)),
+    Lines = string:split(string:trim(Output, trailing, "\n"), "\n", all),
+
+    ?assertEqual("Total children: 0", lists:nth(2, Lines)),
+    ?assertEqual("Worst-case restart count: 0", lists:nth(3, Lines)),
+
+    %% No warning when within budget
+    Footer = lists:last(Lines),
+    ?assert(string:find(Footer, "Remaining budget: 1") =/= nomatch),
+    ?assert(string:find(Footer, "Worst case: 0") =/= nomatch),
+    ?assert(string:find(Footer, "WARNING") =:= nomatch).
+
+init_analysis_integration_test_() ->
+    {setup,
+        fun() ->
+            Children = [
+                #{
+                    id => perm_a,
+                    start => {ides_test_sup, start_child, []},
+                    restart => permanent,
+                    shutdown => 5000,
+                    type => worker,
+                    modules => [ides_test_sup]
+                },
+                #{
+                    id => trans_b,
+                    start => {ides_test_sup, start_child, []},
+                    restart => transient,
+                    shutdown => infinity,
+                    type => worker,
+                    modules => [ides_test_sup]
+                },
+                #{
+                    id => temp_c,
+                    start => {ides_test_sup, start_child, []},
+                    restart => temporary,
+                    shutdown => 10000,
+                    type => worker,
+                    modules => [ides_test_sup]
+                }
+            ],
+            {ok, SupPid} = ides_test_sup:start_link(test_ia, one_for_one, Children),
+            unlink(SupPid),
+            SupPid
+        end,
+        fun(SupPid) -> exit(SupPid, shutdown) end, fun(SupPid) ->
+            ?_test(begin
+                ChildList = supervisor:which_children(SupPid),
+                {perm_a, PermPid, _, _} = lists:keyfind(perm_a, 1, ChildList),
+                {ok, Analysis} = ides:init_analysis(PermPid),
+                ?assertEqual(SupPid, maps:get(supervisor, Analysis)),
+                ?assertEqual(one_for_one, maps:get(sup_strategy, Analysis)),
+                ?assertEqual(3, maps:get(total_children, Analysis)),
+                ?assertEqual(2, maps:get(worst_case_restarts, Analysis)),
+                Children = maps:get(children, Analysis),
+                ?assertEqual(3, length(Children)),
+                PermInfo = find_child(perm_a, Children),
+                ?assertEqual(true, maps:get(counts_against_intensity, PermInfo)),
+                ?assertEqual(permanent, maps:get(restart_type, PermInfo)),
+                ?assertEqual(5000, maps:get(shutdown, PermInfo)),
+                TransInfo = find_child(trans_b, Children),
+                ?assertEqual(true, maps:get(counts_against_intensity, TransInfo)),
+                ?assertEqual(infinity, maps:get(shutdown, TransInfo)),
+                TempInfo = find_child(temp_c, Children),
+                ?assertEqual(false, maps:get(counts_against_intensity, TempInfo)),
+                ?assertEqual(10000, maps:get(shutdown, TempInfo))
+            end)
+        end}.
+
+find_child(Id, [#{id := Id} = Child | _]) -> Child;
+find_child(Id, [_ | Rest]) -> find_child(Id, Rest).
 
 %% helpers: throwaway PIDs for tree construction
 p1() -> spawn(fun() -> ok end).

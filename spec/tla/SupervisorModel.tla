@@ -6,12 +6,13 @@ VARIABLES clock, proc_state, restart_window, history, monitor_down
 vars == <<clock, proc_state, restart_window, history, monitor_down>>
 
 \* Per-process state record type
-ProcState == [ state : {Running, Terminated},
-               exit  : ExitReasons,
-               type  : ProcTypes ]
+ProcState == [ state      : {Running, Terminated},
+               exit       : ExitReasons,
+               type       : ProcTypes,
+               init_phase : InitPhases ]
 
 \* History record for action-level invariant checks
-HistoryRec == [ action : {"Init", "NormalTermination", "AbnormalTermination", "LinkKill", "MonitorCrash", "SupervisorReacts", "Tick"},
+HistoryRec == [ action : {"Init", "NormalTermination", "AbnormalTermination", "LinkKill", "MonitorCrash", "SupervisorReacts", "Tick", "StartChild", "InitSuccess", "InitTimeout"},
                 pid    : Processes ]
 
 TypeOK ==
@@ -26,10 +27,34 @@ Init ==
   /\ proc_state = [p \in Processes |->
        [state |-> Running,
         exit  |-> Normal,
-        type  |-> IF IsSupervisor(p) THEN SupervisorType ELSE WorkerType]]
+        type  |-> IF IsSupervisor(p) THEN SupervisorType ELSE WorkerType,
+        init_phase |-> Running]]
   /\ restart_window = [p \in Processes |-> <<>>]
   /\ history = [action |-> "Init", pid |-> Root]
   /\ monitor_down = [p \in Processes |-> {}]
+
+StartChild(sup, child) ==
+  /\ IsSupervisor(sup)
+  /\ child \in SeqToSet(ChildrenOf[sup])
+  /\ proc_state[child].init_phase = Idle
+  /\ proc_state' = [proc_state EXCEPT ![child].init_phase = Initing]
+  /\ history' = [action |-> "StartChild", pid |-> child]
+  /\ clock' = clock
+  /\ UNCHANGED <<restart_window, monitor_down>>
+
+InitSuccess(p) ==
+  /\ proc_state[p].init_phase = Initing
+  /\ proc_state' = [proc_state EXCEPT ![p].init_phase = Running]
+  /\ history' = [action |-> "InitSuccess", pid |-> p]
+  /\ clock' = clock
+  /\ UNCHANGED <<restart_window, monitor_down>>
+
+InitTimeout(p) ==
+  /\ proc_state[p].init_phase = Initing
+  /\ proc_state' = [proc_state EXCEPT ![p] = [@ EXCEPT !.state = Terminated, !.exit = Abnormal, !.init_phase = InitTimedOut]]
+  /\ history' = [action |-> "InitTimeout", pid |-> p]
+  /\ clock' = clock
+  /\ UNCHANGED <<restart_window, monitor_down>>
 
 Tick ==
   /\ clock < MaxClock
@@ -48,10 +73,10 @@ AbnormalTermination(p) ==
   /\ LET link_victims == {q \in Links[p] : q /= p /\ ~TrapsExits[q]
                                 /\ proc_state[q].state = Running}
      IN /\ proc_state' = [q \in Processes |->
-             CASE q = p ->
-               [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[q].type]
-             [] q \in link_victims ->
-               [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[q].type]
+              CASE q = p ->
+                [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[q].type, init_phase |-> proc_state[q].init_phase]
+              [] q \in link_victims ->
+                [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[q].type, init_phase |-> proc_state[q].init_phase]
              [] OTHER -> proc_state[q]]
   /\ history' = [action |-> "AbnormalTermination", pid |-> p]
   /\ clock' = clock
@@ -65,11 +90,11 @@ LinkKill(p) ==
   /\ LET victims == {q \in Links[p] : q /= p /\ ~TrapsExits[q]
                            /\ proc_state[q].state = Running}
      IN /\ victims # {}
-        /\ proc_state' = [q \in Processes |->
-             CASE q \in victims ->
-               [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[q].type]
-             [] OTHER -> proc_state[q]]
-        /\ history' = [action |-> "LinkKill", pid |-> p]
+         /\ proc_state' = [q \in Processes |->
+              CASE q \in victims ->
+                [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[q].type, init_phase |-> proc_state[q].init_phase]
+              [] OTHER -> proc_state[q]]
+         /\ history' = [action |-> "LinkKill", pid |-> p]
         /\ clock' = clock
         /\ UNCHANGED <<restart_window, monitor_down>>
 
@@ -81,11 +106,11 @@ MonitorCrash(p) ==
                            /\ ~HandlesDown[q]
                            /\ proc_state[q].state = Running}
      IN /\ victims # {}
-        /\ proc_state' = [q \in Processes |->
-             CASE q \in victims ->
-               [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[q].type]
-             [] OTHER -> proc_state[q]]
-        /\ history' = [action |-> "MonitorCrash", pid |-> p]
+         /\ proc_state' = [q \in Processes |->
+              CASE q \in victims ->
+                [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[q].type, init_phase |-> proc_state[q].init_phase]
+              [] OTHER -> proc_state[q]]
+         /\ history' = [action |-> "MonitorCrash", pid |-> p]
         /\ clock' = clock
         /\ UNCHANGED <<restart_window, monitor_down>>
 
@@ -105,8 +130,8 @@ SupervisorReacts(sup) ==
               THEN \* Restart intensity exceeded: supervisor terminates all children and itself
                    /\ restart_window' = restart_window
                    /\ proc_state' = [p \in Processes |->
-                        CASE p = sup \/ p \in children_set ->
-                          [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[p].type]
+                         CASE p = sup \/ p \in children_set ->
+                           [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[p].type, init_phase |-> proc_state[p].init_phase]
                         [] OTHER -> proc_state[p]]
               ELSE \* Restart eligible children, kill newly affected, leave others
                    /\ restart_window' = [restart_window EXCEPT ![sup] =
@@ -114,13 +139,16 @@ SupervisorReacts(sup) ==
                             entries == [t \in 1..count |-> clock]
                         IN restart_window[sup] \o entries]
                    /\ proc_state' = [p \in Processes |->
-                        CASE p \in to_restart ->
-                          [state |-> Running, exit |-> Normal, type |-> proc_state[p].type]
-                        [] p \in newly_killed ->
-                          [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[p].type]
+                         CASE p \in to_restart ->
+                           [state |-> Running, exit |-> Normal, type |-> proc_state[p].type, init_phase |-> Running]
+                         [] p \in newly_killed ->
+                           [state |-> Terminated, exit |-> Abnormal, type |-> proc_state[p].type, init_phase |-> proc_state[p].init_phase]
                         [] OTHER -> proc_state[p]]
 
 Next ==
+  \/ \E sup \in {s \in Processes : IsSupervisor(s)} : \E child \in SeqToSet(ChildrenOf[sup]) : StartChild(sup, child)
+  \/ \E p \in Processes : InitSuccess(p)
+  \/ \E p \in Processes : InitTimeout(p)
   \/ \E p \in Processes : NormalTermination(p)
   \/ \E p \in Processes : AbnormalTermination(p)
   \/ \E p \in Processes : MonitorCrash(p)
@@ -224,4 +252,15 @@ CascadeCorrect ==
     IN \A c \in SeqToSet(ChildrenOf[sup]) :
       (IsSupervisor(c) /\ proc_state[c].state = Terminated) =>
       (proc_state[sup].state = Terminated \/ proc_state[c].state = Running)
+
+\* After any InitTimeout, if the parent supervisor's restart budget
+\* is exceeded, the supervisor must be terminated.
+StartupIntensityCorrect ==
+  (history.action = "InitTimeout") =>
+    LET p == history.pid
+        sup == ParentOf(p)
+        count == RestartCount(sup, restart_window, clock)
+        max_r == MaxR[sup]
+    IN (count > max_r) =>
+       proc_state[sup].state = Terminated
 ====

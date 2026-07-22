@@ -9,7 +9,8 @@
     link_info/1,
     monitor_info/1,
     kill_graph_detail/1,
-    intensity_info/1
+    intensity_info/1,
+    init_analysis/1
 ]).
 
 -type exit_reason() :: normal | abnormal.
@@ -219,6 +220,79 @@ intensity_info(SupPid) ->
         _:_ ->
             {ok, #{max_restarts => 1, max_period => 5}}
     end.
+
+-doc """
+Return init analysis for the parent supervisor of `Pid`.
+
+Walks the parent supervisor's children and computes a worst-case
+init failure assessment: how many children could fail init before
+exhausting the supervisor's restart intensity budget.
+""".
+-spec init_analysis(Pid :: pid()) ->
+    {ok, ides_family:init_analysis_result()} | {error, term()}.
+init_analysis(Pid) ->
+    case ides_family:parent_info(Pid) of
+        {ok, #{sup_pid := SupPid, sup_strategy := Strategy, child_pids := ChildPids}} ->
+            Children = build_children(SupPid, ChildPids),
+            {ok, Intensity} = intensity_info(SupPid),
+            WorstCase = length([1 || #{counts_against_intensity := true} <- Children]),
+            Budget =
+                maps:get(max_restarts, Intensity) -
+                    maps:get(current_count, Intensity, 0),
+            {ok, #{
+                supervisor => SupPid,
+                sup_strategy => Strategy,
+                sup_intensity => Intensity,
+                target_pid => Pid,
+                total_children => length(Children),
+                children => Children,
+                worst_case_restarts => WorstCase,
+                remaining_budget => Budget
+            }};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+-spec build_children(SupPid :: pid(), ChildPids :: [{term(), pid()}]) ->
+    [ides_family:child_init_info()].
+build_children(SupPid, ChildPids) ->
+    RawChildren = supervisor:which_children(SupPid),
+    [build_child_init_info(SupPid, Id, Pid, RawChildren) || {Id, Pid} <- ChildPids].
+
+-spec build_child_init_info(
+    SupPid :: pid(), Id :: term(), Pid :: pid(), RawChildren :: [term()]
+) -> ides_family:child_init_info().
+build_child_init_info(SupPid, Id, Pid, RawChildren) ->
+    RestartType = ides_family:get_restart_type(SupPid, Id),
+    Shutdown = get_shutdown(SupPid, Id),
+    Phase =
+        case lists:keyfind(Id, 1, RawChildren) of
+            {Id, Pid, _Type, _Mods} when is_pid(Pid) -> running;
+            {Id, restarting, _Type, _Mods} -> restarting;
+            _ -> undefined
+        end,
+    Counts = counts_against_intensity(RestartType),
+    #{
+        id => Id,
+        pid => Pid,
+        restart_type => RestartType,
+        shutdown => Shutdown,
+        phase => Phase,
+        counts_against_intensity => Counts
+    }.
+
+-spec get_shutdown(SupPid :: pid(), Id :: term()) -> timeout().
+get_shutdown(SupPid, Id) ->
+    case supervisor:get_childspec(SupPid, Id) of
+        {ok, #{shutdown := Shutdown}} -> Shutdown;
+        {ok, {Id, _StartFunc, _RestartType, Shutdown, _Type, _Modules}} -> Shutdown;
+        _ -> 5000
+    end.
+
+-spec counts_against_intensity(RestartType :: ides_family:child_restart_type()) -> boolean().
+counts_against_intensity(permanent) -> true;
+counts_against_intensity(transient) -> true;
+counts_against_intensity(temporary) -> false.
 
 %% --- Internal ---
 

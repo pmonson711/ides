@@ -13,7 +13,8 @@ MODELS := \
 	MCLinkKill \
 	MCMonitorCrash \
 	MCNestedDeep3 \
-	MCNestedDeep4
+	MCNestedDeep4 \
+	MCStartup
 
 .PHONY: all check $(MODELS) clean
 
