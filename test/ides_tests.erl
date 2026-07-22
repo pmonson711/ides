@@ -238,8 +238,7 @@ should_restart_integration_test_() ->
         end}.
 
 kill_graph_integration_test_() ->
-    {setup,
-        fun() -> start_ab_sup(test_kg, one_for_one) end,
+    {setup, fun() -> start_ab_sup(test_kg, one_for_one) end,
         fun(SupPid) -> exit(SupPid, shutdown) end, fun(SupPid) ->
             ?_test(assert_kill_graph_integration(SupPid))
         end}.
@@ -303,8 +302,7 @@ affected_siblings_integration_test_() ->
         end}.
 
 affected_siblings_one_for_all_integration_test_() ->
-    {setup,
-        fun() -> start_ab_sup(test_as2, one_for_all) end,
+    {setup, fun() -> start_ab_sup(test_as2, one_for_all) end,
         fun(SupPid) -> exit(SupPid, shutdown) end, fun(SupPid) ->
             ?_test(assert_affected_siblings_o4a_integration(SupPid))
         end}.
