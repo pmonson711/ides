@@ -31,16 +31,7 @@ cascade restarts under the parent supervisor's strategy:
 kill_graph(TargetPid) ->
     case ides_family:get_ancestors(TargetPid) of
         {ok, Ancestors} when Ancestors =/= [] ->
-            AncestorPids = lists:filtermap(
-                fun(P) ->
-                    try ides_family:resolve_pid(P) of
-                        Pid -> {true, Pid}
-                    catch
-                        _:_ -> false
-                    end
-                end,
-                Ancestors
-            ),
+            AncestorPids = resolve_ancestor_pids(Ancestors),
             case ides_family:parent_info(TargetPid) of
                 {ok, Info} ->
                     KillerSiblings = killer_siblings(Info),
@@ -159,16 +150,7 @@ Return the kill graph with each entry tagged by its kill mechanism:
 kill_graph_detail(TargetPid) ->
     case ides_family:get_ancestors(TargetPid) of
         {ok, Ancestors} when Ancestors =/= [] ->
-            AncestorPids = lists:filtermap(
-                fun(P) ->
-                    try ides_family:resolve_pid(P) of
-                        Pid -> {true, Pid}
-                    catch
-                        _:_ -> false
-                    end
-                end,
-                Ancestors
-            ),
+            AncestorPids = resolve_ancestor_pids(Ancestors),
             case ides_family:parent_info(TargetPid) of
                 {ok, Info} ->
                     SiblingKillers = killer_siblings(Info),
@@ -295,6 +277,19 @@ counts_against_intensity(transient) -> true;
 counts_against_intensity(temporary) -> false.
 
 %% --- Internal ---
+
+-spec resolve_ancestor_pids(Ancestors :: [term()]) -> [pid()].
+resolve_ancestor_pids(Ancestors) ->
+    lists:filtermap(
+        fun(P) ->
+            try ides_family:resolve_pid(P) of
+                Pid -> {true, Pid}
+            catch
+                _:_ -> false
+            end
+        end,
+        Ancestors
+    ).
 
 -spec killer_siblings(Info :: ides_family:parent_info()) -> [pid()].
 killer_siblings(#{sup_strategy := one_for_all, child_pids := Children, target_position := _Pos}) ->

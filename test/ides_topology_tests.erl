@@ -33,16 +33,10 @@ one_for_one_topology_test_() ->
             ?assert(string:find(Output, "transient") =/= nomatch)
         end,
         fun(Output) ->
-            [TL | _] = [
-                L
-             || L <- string:split(Output, "\n", all),
-                string:prefix(L, "  * ") =/= nomatch
-            ],
-            ?assert(string:find(TL, "transient") =/= nomatch)
+            assert_target_line_contains("transient", Output)
         end,
         fun(Output) ->
-            Lines = string:split(string:trim(Output, trailing), "\n", all),
-            ?assertEqual(3, length(Lines))
+            assert_line_count(3, Output)
         end
     ]).
 
@@ -82,16 +76,10 @@ one_for_all_topology_test_() ->
             ?assert(string:find(Output, "temporary") =/= nomatch)
         end,
         fun(Output) ->
-            [TL | _] = [
-                L
-             || L <- string:split(Output, "\n", all),
-                string:prefix(L, "  * ") =/= nomatch
-            ],
-            ?assert(string:find(TL, "permanent") =/= nomatch)
+            assert_target_line_contains("permanent", Output)
         end,
         fun(Output) ->
-            Lines = string:split(string:trim(Output, trailing), "\n", all),
-            ?assertEqual(4, length(Lines))
+            assert_line_count(4, Output)
         end
     ]).
 
@@ -128,8 +116,7 @@ rest_for_one_topology_test_() ->
             ?assert(string:find(Output, "rest_for_one") =/= nomatch)
         end,
         fun(Output) ->
-            Lines = string:split(string:trim(Output, trailing), "\n", all),
-            ?assertEqual(4, length(Lines))
+            assert_line_count(4, Output)
         end
     ]).
 
@@ -155,22 +142,7 @@ simple_one_for_one_topology_test_() ->
             exit(SupPid, shutdown)
         end,
         fun(SupPid) ->
-            ?_test(begin
-                Children = supervisor:which_children(SupPid),
-                ?assertEqual(2, length(Children)),
-                [_Child1, Child2] = Children,
-                {_Id, TargetPid, _Type, _Mods} = Child2,
-                true = is_pid(TargetPid),
-                {ok, Tree} = ides:ancestors(TargetPid),
-                Output = lists:flatten(ides:format(TargetPid, Tree)),
-                ?assert(string:find(Output, "simple_one_for_one") =/= nomatch),
-                TargetLines = [
-                    L
-                 || L <- string:split(Output, "\n", all),
-                    string:prefix(L, "  * ") =/= nomatch
-                ],
-                ?assertEqual(1, length(TargetLines))
-            end)
+            ?_test(assert_simple_one_for_one_output(SupPid))
         end}.
 
 %% --- helpers ---
@@ -186,15 +158,46 @@ run_topology(Name, Strategy, Children, TargetId, Checks) ->
             exit(SupPid, shutdown)
         end,
         fun(SupPid) ->
-            ?_test(begin
-                [Child] = lists:filter(
-                    fun({Id, _, _, _}) -> Id =:= TargetId end,
-                    supervisor:which_children(SupPid)
-                ),
-                {_Id, TargetPid, _Type, _Mods} = Child,
-                true = is_pid(TargetPid),
-                {ok, Tree} = ides:ancestors(TargetPid),
-                Output = lists:flatten(ides:format(TargetPid, Tree)),
-                [Check(Output) || Check <- Checks]
-            end)
+            ?_test(run_topology_test(SupPid, TargetId, Checks))
         end}.
+
+%% --- internal helpers ---
+
+assert_simple_one_for_one_output(SupPid) ->
+    Children = supervisor:which_children(SupPid),
+    ?assertEqual(2, length(Children)),
+    [_Child1, Child2] = Children,
+    {_Id, TargetPid, _Type, _Mods} = Child2,
+    true = is_pid(TargetPid),
+    {ok, Tree} = ides:ancestors(TargetPid),
+    Output = lists:flatten(ides:format(TargetPid, Tree)),
+    ?assert(string:find(Output, "simple_one_for_one") =/= nomatch),
+    TargetLines = [
+        L
+     || L <- string:split(Output, "\n", all),
+        string:prefix(L, "  * ") =/= nomatch
+    ],
+    ?assertEqual(1, length(TargetLines)).
+
+run_topology_test(SupPid, TargetId, Checks) ->
+    [Child] = lists:filter(
+        fun({Id, _, _, _}) -> Id =:= TargetId end,
+        supervisor:which_children(SupPid)
+    ),
+    {_Id, TargetPid, _Type, _Mods} = Child,
+    true = is_pid(TargetPid),
+    {ok, Tree} = ides:ancestors(TargetPid),
+    Output = lists:flatten(ides:format(TargetPid, Tree)),
+    [Check(Output) || Check <- Checks].
+
+assert_target_line_contains(Substring, Output) ->
+    [TL | _] = [
+        L
+     || L <- string:split(Output, "\n", all),
+        string:prefix(L, "  * ") =/= nomatch
+    ],
+    ?assert(string:find(TL, Substring) =/= nomatch).
+
+assert_line_count(Expected, Output) ->
+    Lines = string:split(string:trim(Output, trailing), "\n", all),
+    ?assertEqual(Expected, length(Lines)).
