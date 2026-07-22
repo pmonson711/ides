@@ -195,24 +195,7 @@ ancestors_one_for_one_integration_test_() ->
             exit(SupPid, shutdown)
         end,
         fun(SupPid) ->
-            ?_test(begin
-                [Child] = lists:filter(
-                    fun({Id, _, _, _}) -> Id =:= worker_b end,
-                    supervisor:which_children(SupPid)
-                ),
-                {_Id, WorkerBPid, _Type, _Mods} = Child,
-                true = is_pid(WorkerBPid),
-                {ok, Tree} = ides:ancestors(WorkerBPid),
-                Output = lists:flatten(ides:format(WorkerBPid, Tree)),
-                [SupLine | _] = string:split(string:trim(Output, trailing), "\n", all),
-                ?assert(string:find(SupLine, "one_for_one") =/= nomatch),
-                TargetLines = [
-                    L
-                 || L <- string:split(Output, "\n", all),
-                    string:prefix(L, "  * ") =/= nomatch
-                ],
-                ?assertEqual(1, length(TargetLines))
-            end)
+            ?_test(assert_o4o_ancestors_integration(SupPid))
         end}.
 
 %% --- TLA+ property tests ---
@@ -251,56 +234,14 @@ should_restart_integration_test_() ->
             SupPid
         end,
         fun(SupPid) -> exit(SupPid, shutdown) end, fun(SupPid) ->
-            ?_test(begin
-                ChildList = supervisor:which_children(SupPid),
-                {perm_child, P1, _, _} = lists:keyfind(perm_child, 1, ChildList),
-                {trans_child, P2, _, _} = lists:keyfind(trans_child, 1, ChildList),
-                {temp_child, P3, _, _} = lists:keyfind(temp_child, 1, ChildList),
-                ?assert(ides:should_restart(P1, normal)),
-                ?assert(ides:should_restart(P1, abnormal)),
-                ?assertNot(ides:should_restart(P2, normal)),
-                ?assert(ides:should_restart(P2, abnormal)),
-                ?assertNot(ides:should_restart(P3, normal)),
-                ?assertNot(ides:should_restart(P3, abnormal))
-            end)
+            ?_test(assert_should_restart_integration(SupPid))
         end}.
 
 kill_graph_integration_test_() ->
     {setup,
-        fun() ->
-            Children = [
-                #{
-                    id => child_a,
-                    start => {ides_test_sup, start_child, []},
-                    restart => permanent,
-                    shutdown => 5000,
-                    type => worker,
-                    modules => [ides_test_sup]
-                },
-                #{
-                    id => child_b,
-                    start => {ides_test_sup, start_child, []},
-                    restart => permanent,
-                    shutdown => 5000,
-                    type => worker,
-                    modules => [ides_test_sup]
-                }
-            ],
-            {ok, SupPid} = ides_test_sup:start_link(test_kg, one_for_one, Children),
-            unlink(SupPid),
-            SupPid
-        end,
+        fun() -> start_ab_sup(test_kg, one_for_one) end,
         fun(SupPid) -> exit(SupPid, shutdown) end, fun(SupPid) ->
-            ?_test(begin
-                ChildList1 = supervisor:which_children(SupPid),
-                {child_a, P1, _, _} = lists:keyfind(child_a, 1, ChildList1),
-                {child_b, P2, _, _} = lists:keyfind(child_b, 1, ChildList1),
-                %% one_for_one: no sibling killers, only ancestors
-                {ok, KG1} = ides:kill_graph(P1),
-                ?assertNot(lists:member(P2, KG1)),
-                ?assert(lists:member(SupPid, KG1)),
-                exit(SupPid, shutdown)
-            end)
+            ?_test(assert_kill_graph_integration(SupPid))
         end}.
 
 kill_graph_one_for_all_integration_test_() ->
@@ -329,15 +270,7 @@ kill_graph_one_for_all_integration_test_() ->
             SupPid
         end,
         fun(SupPid) -> exit(SupPid, shutdown) end, fun(SupPid) ->
-            ?_test(begin
-                ChildList2 = supervisor:which_children(SupPid),
-                {child_x, PX, _, _} = lists:keyfind(child_x, 1, ChildList2),
-                {child_y, PY, _, _} = lists:keyfind(child_y, 1, ChildList2),
-                %% one_for_all: all siblings are killers
-                {ok, KG} = ides:kill_graph(PX),
-                ?assert(lists:member(PY, KG)),
-                ?assert(lists:member(SupPid, KG))
-            end)
+            ?_test(assert_kill_graph_o4a_integration(SupPid))
         end}.
 
 affected_siblings_integration_test_() ->
@@ -366,54 +299,14 @@ affected_siblings_integration_test_() ->
             SupPid
         end,
         fun(SupPid) -> exit(SupPid, shutdown) end, fun(SupPid) ->
-            ?_test(begin
-                ChildList = supervisor:which_children(SupPid),
-                {child1, P1, _, _} = lists:keyfind(child1, 1, ChildList),
-                {child2, P2, _, _} = lists:keyfind(child2, 1, ChildList),
-                %% one_for_one: only the terminated child itself is affected
-                {ok, Aff1} = ides:affected_siblings(P1),
-                ?assertEqual(1, length(Aff1)),
-                ?assert(lists:member(P1, Aff1)),
-                ?assertNot(lists:member(P2, Aff1))
-            end)
+            ?_test(assert_affected_siblings_integration(SupPid))
         end}.
 
 affected_siblings_one_for_all_integration_test_() ->
     {setup,
-        fun() ->
-            Children = [
-                #{
-                    id => child_a,
-                    start => {ides_test_sup, start_child, []},
-                    restart => permanent,
-                    shutdown => 5000,
-                    type => worker,
-                    modules => [ides_test_sup]
-                },
-                #{
-                    id => child_b,
-                    start => {ides_test_sup, start_child, []},
-                    restart => permanent,
-                    shutdown => 5000,
-                    type => worker,
-                    modules => [ides_test_sup]
-                }
-            ],
-            {ok, SupPid} = ides_test_sup:start_link(test_as2, one_for_all, Children),
-            unlink(SupPid),
-            SupPid
-        end,
+        fun() -> start_ab_sup(test_as2, one_for_all) end,
         fun(SupPid) -> exit(SupPid, shutdown) end, fun(SupPid) ->
-            ?_test(begin
-                ChildList = supervisor:which_children(SupPid),
-                {child_a, PA, _, _} = lists:keyfind(child_a, 1, ChildList),
-                {child_b, PB, _, _} = lists:keyfind(child_b, 1, ChildList),
-                %% one_for_all: all siblings are affected
-                {ok, Aff} = ides:affected_siblings(PA),
-                ?assertEqual(2, length(Aff)),
-                ?assert(lists:member(PA, Aff)),
-                ?assert(lists:member(PB, Aff))
-            end)
+            ?_test(assert_affected_siblings_o4a_integration(SupPid))
         end}.
 
 %% --- Link and monitor tests ---
@@ -457,14 +350,7 @@ kill_graph_detail_test_() ->
             SupPid
         end,
         fun(SupPid) -> exit(SupPid, shutdown) end, fun(SupPid) ->
-            ?_test(begin
-                ChildList = supervisor:which_children(SupPid),
-                {child1, ChildPid, _, _} = lists:keyfind(child1, 1, ChildList),
-                {ok, Sources} = ides:kill_graph_detail(ChildPid),
-                ?assert(is_list(Sources)),
-                HasAncestor = lists:any(fun({ancestor, P}) -> P =:= SupPid end, Sources),
-                ?assert(HasAncestor)
-            end)
+            ?_test(assert_kill_graph_detail_integration(SupPid))
         end}.
 
 kill_graph_includes_links_test_() ->
@@ -485,15 +371,7 @@ kill_graph_includes_links_test_() ->
             SupPid
         end,
         fun(SupPid) -> exit(SupPid, shutdown) end, fun(SupPid) ->
-            ?_test(begin
-                ChildList = supervisor:which_children(SupPid),
-                {child_a, ChildPid, _, _} = lists:keyfind(child_a, 1, ChildList),
-                {ok, KG} = ides:kill_graph(ChildPid),
-                ?assert(lists:member(SupPid, KG)),
-                {ok, #{links := Links, traps_exits := Traps}} = ides:link_info(ChildPid),
-                ?assert(is_list(Links)),
-                ?assert(is_boolean(Traps))
-            end)
+            ?_test(assert_kill_graph_links_integration(SupPid))
         end}.
 
 %% --- Intensity info tests ---
@@ -516,13 +394,7 @@ intensity_info_integration_test_() ->
             SupPid
         end,
         fun(SupPid) -> exit(SupPid, shutdown) end, fun(SupPid) ->
-            ?_test(begin
-                {ok, Info} = ides:intensity_info(SupPid),
-                ?assert(is_map_key(max_restarts, Info)),
-                ?assert(is_map_key(max_period, Info)),
-                ?assert(is_integer(maps:get(max_restarts, Info))),
-                ?assert(is_integer(maps:get(max_period, Info)))
-            end)
+            ?_test(assert_intensity_info_integration(SupPid))
         end}.
 
 intensity_info_dead_process_test() ->
@@ -675,31 +547,147 @@ init_analysis_integration_test_() ->
             SupPid
         end,
         fun(SupPid) -> exit(SupPid, shutdown) end, fun(SupPid) ->
-            ?_test(begin
-                ChildList = supervisor:which_children(SupPid),
-                {perm_a, PermPid, _, _} = lists:keyfind(perm_a, 1, ChildList),
-                {ok, Analysis} = ides:init_analysis(PermPid),
-                ?assertEqual(SupPid, maps:get(supervisor, Analysis)),
-                ?assertEqual(one_for_one, maps:get(sup_strategy, Analysis)),
-                ?assertEqual(3, maps:get(total_children, Analysis)),
-                ?assertEqual(2, maps:get(worst_case_restarts, Analysis)),
-                Children = maps:get(children, Analysis),
-                ?assertEqual(3, length(Children)),
-                PermInfo = find_child(perm_a, Children),
-                ?assertEqual(true, maps:get(counts_against_intensity, PermInfo)),
-                ?assertEqual(permanent, maps:get(restart_type, PermInfo)),
-                ?assertEqual(5000, maps:get(shutdown, PermInfo)),
-                TransInfo = find_child(trans_b, Children),
-                ?assertEqual(true, maps:get(counts_against_intensity, TransInfo)),
-                ?assertEqual(infinity, maps:get(shutdown, TransInfo)),
-                TempInfo = find_child(temp_c, Children),
-                ?assertEqual(false, maps:get(counts_against_intensity, TempInfo)),
-                ?assertEqual(10000, maps:get(shutdown, TempInfo))
-            end)
+            ?_test(assert_init_analysis_integration(SupPid))
         end}.
 
 find_child(Id, [#{id := Id} = Child | _]) -> Child;
 find_child(Id, [_ | Rest]) -> find_child(Id, Rest).
+
+%% --- integration test helpers ---
+
+child_pid(Id, SupPid) ->
+    {Id, Pid, _, _} = lists:keyfind(Id, 1, supervisor:which_children(SupPid)),
+    Pid.
+
+start_ab_sup(Name, Strategy) ->
+    Children = [
+        #{
+            id => child_a,
+            start => {ides_test_sup, start_child, []},
+            restart => permanent,
+            shutdown => 5000,
+            type => worker,
+            modules => [ides_test_sup]
+        },
+        #{
+            id => child_b,
+            start => {ides_test_sup, start_child, []},
+            restart => permanent,
+            shutdown => 5000,
+            type => worker,
+            modules => [ides_test_sup]
+        }
+    ],
+    {ok, SupPid} = ides_test_sup:start_link(Name, Strategy, Children),
+    unlink(SupPid),
+    SupPid.
+
+assert_o4o_ancestors_integration(SupPid) ->
+    [Child] = lists:filter(
+        fun({Id, _, _, _}) -> Id =:= worker_b end,
+        supervisor:which_children(SupPid)
+    ),
+    {_Id, WorkerBPid, _Type, _Mods} = Child,
+    true = is_pid(WorkerBPid),
+    {ok, Tree} = ides:ancestors(WorkerBPid),
+    Output = lists:flatten(ides:format(WorkerBPid, Tree)),
+    [SupLine | _] = string:split(string:trim(Output, trailing), "\n", all),
+    ?assert(string:find(SupLine, "one_for_one") =/= nomatch),
+    TargetLines = [
+        L
+     || L <- string:split(Output, "\n", all),
+        string:prefix(L, "  * ") =/= nomatch
+    ],
+    ?assertEqual(1, length(TargetLines)).
+
+assert_should_restart_integration(SupPid) ->
+    P1 = child_pid(perm_child, SupPid),
+    P2 = child_pid(trans_child, SupPid),
+    P3 = child_pid(temp_child, SupPid),
+    ?assert(ides:should_restart(P1, normal)),
+    ?assert(ides:should_restart(P1, abnormal)),
+    ?assertNot(ides:should_restart(P2, normal)),
+    ?assert(ides:should_restart(P2, abnormal)),
+    ?assertNot(ides:should_restart(P3, normal)),
+    ?assertNot(ides:should_restart(P3, abnormal)).
+
+assert_kill_graph_integration(SupPid) ->
+    P1 = child_pid(child_a, SupPid),
+    P2 = child_pid(child_b, SupPid),
+    %% one_for_one: no sibling killers, only ancestors
+    {ok, KG1} = ides:kill_graph(P1),
+    ?assertNot(lists:member(P2, KG1)),
+    ?assert(lists:member(SupPid, KG1)),
+    exit(SupPid, shutdown).
+
+assert_kill_graph_o4a_integration(SupPid) ->
+    PX = child_pid(child_x, SupPid),
+    PY = child_pid(child_y, SupPid),
+    %% one_for_all: all siblings are killers
+    {ok, KG} = ides:kill_graph(PX),
+    ?assert(lists:member(PY, KG)),
+    ?assert(lists:member(SupPid, KG)).
+
+assert_affected_siblings_integration(SupPid) ->
+    P1 = child_pid(child1, SupPid),
+    P2 = child_pid(child2, SupPid),
+    %% one_for_one: only the terminated child itself is affected
+    {ok, Aff1} = ides:affected_siblings(P1),
+    ?assertEqual(1, length(Aff1)),
+    ?assert(lists:member(P1, Aff1)),
+    ?assertNot(lists:member(P2, Aff1)).
+
+assert_affected_siblings_o4a_integration(SupPid) ->
+    PA = child_pid(child_a, SupPid),
+    PB = child_pid(child_b, SupPid),
+    %% one_for_all: all siblings are affected
+    {ok, Aff} = ides:affected_siblings(PA),
+    ?assertEqual(2, length(Aff)),
+    ?assert(lists:member(PA, Aff)),
+    ?assert(lists:member(PB, Aff)).
+
+assert_kill_graph_detail_integration(SupPid) ->
+    ChildPid = child_pid(child1, SupPid),
+    {ok, Sources} = ides:kill_graph_detail(ChildPid),
+    ?assert(is_list(Sources)),
+    HasAncestor = lists:any(fun({ancestor, P}) -> P =:= SupPid end, Sources),
+    ?assert(HasAncestor).
+
+assert_kill_graph_links_integration(SupPid) ->
+    ChildPid = child_pid(child_a, SupPid),
+    {ok, KG} = ides:kill_graph(ChildPid),
+    ?assert(lists:member(SupPid, KG)),
+    {ok, #{links := Links, traps_exits := Traps}} = ides:link_info(ChildPid),
+    ?assert(is_list(Links)),
+    ?assert(is_boolean(Traps)).
+
+assert_intensity_info_integration(SupPid) ->
+    {ok, Info} = ides:intensity_info(SupPid),
+    ?assert(is_map_key(max_restarts, Info)),
+    ?assert(is_map_key(max_period, Info)),
+    ?assert(is_integer(maps:get(max_restarts, Info))),
+    ?assert(is_integer(maps:get(max_period, Info))).
+
+assert_init_analysis_integration(SupPid) ->
+    ChildList = supervisor:which_children(SupPid),
+    {perm_a, PermPid, _, _} = lists:keyfind(perm_a, 1, ChildList),
+    {ok, Analysis} = ides:init_analysis(PermPid),
+    ?assertEqual(SupPid, maps:get(supervisor, Analysis)),
+    ?assertEqual(one_for_one, maps:get(sup_strategy, Analysis)),
+    ?assertEqual(3, maps:get(total_children, Analysis)),
+    ?assertEqual(2, maps:get(worst_case_restarts, Analysis)),
+    Children = maps:get(children, Analysis),
+    ?assertEqual(3, length(Children)),
+    PermInfo = find_child(perm_a, Children),
+    ?assertEqual(true, maps:get(counts_against_intensity, PermInfo)),
+    ?assertEqual(permanent, maps:get(restart_type, PermInfo)),
+    ?assertEqual(5000, maps:get(shutdown, PermInfo)),
+    TransInfo = find_child(trans_b, Children),
+    ?assertEqual(true, maps:get(counts_against_intensity, TransInfo)),
+    ?assertEqual(infinity, maps:get(shutdown, TransInfo)),
+    TempInfo = find_child(temp_c, Children),
+    ?assertEqual(false, maps:get(counts_against_intensity, TempInfo)),
+    ?assertEqual(10000, maps:get(shutdown, TempInfo)).
 
 %% helpers: throwaway PIDs for tree construction
 p1() -> spawn(fun() -> ok end).
