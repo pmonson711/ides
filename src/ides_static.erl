@@ -126,10 +126,7 @@ build_child(Child, BeamMap) ->
                     case ides_static_parse:parse_init(Info) of
                         {ok, SupFlags, ChildSpecs} ->
                             {Children, ChildWarnings} = build_children(ChildSpecs, BeamMap),
-                            Warns = case maps:get(strategy, SupFlags) of
-                                simple_one_for_one -> [{dynamic_child_spec, M} | ChildWarnings];
-                                _ -> ChildWarnings
-                            end,
+                            Warns = child_warnings(SupFlags, M, ChildWarnings),
                             Result = #{
                                 name => atom_to_list(maps:get(id, Child)),
                                 module => M,
@@ -170,6 +167,12 @@ build_child(Child, BeamMap) ->
                 type => worker,
                 restart_type => maps:get(restart, Child)
             }, Warns}
+    end.
+
+child_warnings(SupFlags, M, ChildWarnings) ->
+    case maps:get(strategy, SupFlags) of
+        simple_one_for_one -> [{dynamic_child_spec, M} | ChildWarnings];
+        _ -> ChildWarnings
     end.
 
 -doc "Return restart intensity policy for a supervisor module.".
@@ -219,32 +222,38 @@ find_killers_in_trees(Module, Trees) ->
 
 find_killers_in_node(Module, #{type := supervisor, children := Children} = Sup, Ancestors) ->
     SupModule = maps:get(module, Sup),
-    case lists:any(fun(C) -> maps:get(module, C) =:= Module end, Children) of
+    case has_child(Module, Children) of
         true ->
             AncestorModules = [maps:get(module, A) || A <- Ancestors],
             Strategy = maps:get(strategy, Sup),
-            SiblingKillers = case Strategy of
-                one_for_all ->
-                    [maps:get(module, C) || C <- Children, maps:get(module, C) =/= Module];
-                rest_for_one ->
-                    {Before, _} = lists:splitwith(fun(C) -> maps:get(module, C) =/= Module end, Children),
-                    [maps:get(module, C) || C <- Before];
-                _ ->
-                    []
-            end,
+            SiblingKillers = killer_siblings_for(Strategy, Module, Children),
             [SupModule | AncestorModules] ++ SiblingKillers ++
-                lists:flatmap(
-                    fun(C) -> find_killers_in_node(Module, C, [Sup | Ancestors]) end,
-                    Children
-                );
+                child_killers(Module, Children, [Sup | Ancestors]);
         false ->
-            lists:flatmap(
-                fun(C) -> find_killers_in_node(Module, C, [Sup | Ancestors]) end,
-                Children
-            )
+            child_killers(Module, Children, [Sup | Ancestors])
     end;
 find_killers_in_node(_Module, _Node, _Ancestors) ->
     [].
+
+child_killers(Module, Children, Ancestors) ->
+    lists:flatmap(
+        fun(C) -> find_killers_in_node(Module, C, Ancestors) end,
+        Children
+    ).
+
+killer_siblings_for(one_for_all, Module, Children) ->
+    [maps:get(module, C) || C <- Children, maps:get(module, C) =/= Module];
+killer_siblings_for(rest_for_one, Module, Children) ->
+    {Before, _} = lists:splitwith(
+        fun(C) -> maps:get(module, C) =/= Module end,
+        Children
+    ),
+    [maps:get(module, C) || C <- Before];
+killer_siblings_for(_, _Module, _Children) ->
+    [].
+
+has_child(Module, Children) ->
+    lists:any(fun(C) -> maps:get(module, C) =:= Module end, Children).
 
 -doc "Return the ancestor supervisor chain for a module, from root to direct parent.".
 -spec ancestors(module(), [file:filename()]) ->
@@ -265,7 +274,7 @@ find_ancestors(Module, Trees) ->
     lists:flatmap(fun(T) -> find_ancestors_path(Module, T) end, Trees).
 
 find_ancestors_path(Module, #{type := supervisor, module := Mod, children := Children}) ->
-    case lists:any(fun(C) -> maps:get(module, C) =:= Module end, Children) of
+    case has_child(Module, Children) of
         true ->
             [Mod];
         false ->
@@ -293,7 +302,7 @@ find_siblings(Module, Trees) ->
     lists:usort(find_siblings_in_trees(Module, Trees)).
 
 find_siblings_in_trees(Module, [#{children := Children} | _] = Trees) ->
-    case lists:any(fun(C) -> maps:get(module, C) =:= Module end, Children) of
+    case has_child(Module, Children) of
         true ->
             [maps:get(module, C) || C <- Children, maps:get(module, C) =/= Module];
         false ->
@@ -314,7 +323,11 @@ format(Module, #{tree := Trees}) ->
 format(Module, Trees) ->
     [format_node(Module, T, 0) || T <- Trees].
 
-format_node(Module, #{type := supervisor, strategy := Strategy, children := Children} = Node, Depth) ->
+format_node(
+    Module,
+    #{type := supervisor, strategy := Strategy, children := Children} = Node,
+    Depth
+) ->
     Name = maps:get(name, Node, atom_to_list(maps:get(module, Node))),
     Anno = case maps:find(restart_type, Node) of
         {ok, Restart} -> [" (", atom_to_list(Strategy), ", ", atom_to_list(Restart), ")"];
@@ -342,7 +355,7 @@ format_prefix(_Module, _Node, Depth) ->
 -spec print(module(), #{tree := [static_process()]} | [static_process()]) -> ok.
 
 print(Module, Trees) ->
-    io:put_chars(format(Module, Trees)).
+    io:format("~s", [format(Module, Trees)]).
 
 -doc "Look up a module by its registered process name in the tree.".
 -spec find_process_by_name(string(), [static_process()]) -> {ok, module()} | {error, not_found}.

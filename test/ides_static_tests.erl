@@ -4,11 +4,12 @@
 
 support_beams() ->
     Files = filelib:wildcard("priv/support/static_*.erl"),
-    [begin
-         Src = filename:rootname(F) ++ ".erl",
-         {ok, _Mod, Beam} = compile:file(Src, [debug_info, binary, report, return_errors]),
-         Beam
-     end || F <- Files].
+    [compile_support_file(F) || F <- Files].
+
+compile_support_file(F) ->
+    Src = filename:rootname(F) ++ ".erl",
+    {ok, _Mod, Beam} = compile:file(Src, [debug_info, binary, report, return_errors]),
+    Beam.
 
 supervisor_tree_from_support_beams_test() ->
     Beams = support_beams(),
@@ -90,11 +91,17 @@ find_process_by_name_not_found_test() ->
 demo_app_beams() ->
     filelib:wildcard("examples/demo_app/_build/default/lib/demo/ebin/*.beam").
 
+find_tree(Module, Trees) ->
+    hd([T || T <- Trees, maps:get(module, T) =:= Module]).
+
+find_child(Module, Parent) ->
+    hd([C || C <- maps:get(children, Parent), maps:get(module, C) =:= Module]).
+
 demo_supervisor_tree_test() ->
     Beams = demo_app_beams(),
-    ?assert(length(Beams) > 0),
+    ?assert(Beams =/= []),
     {ok, #{tree := Tree}} = ides_static:supervisor_tree(Beams),
-    [DemoSup] = [T || T <- Tree, maps:get(module, T) =:= demo_sup],
+    DemoSup = find_tree(demo_sup, Tree),
     ?assertEqual(one_for_one, maps:get(strategy, DemoSup)),
     Intensity = maps:get(intensity, DemoSup),
     ?assertEqual(1, maps:get(max_restarts, Intensity)),
@@ -110,8 +117,8 @@ demo_supervisor_tree_test() ->
 demo_web_sup_strategy_test() ->
     Beams = demo_app_beams(),
     {ok, #{tree := Tree}} = ides_static:supervisor_tree(Beams),
-    [DemoSup] = [T || T <- Tree, maps:get(module, T) =:= demo_sup],
-    [WebSup] = [C || C <- maps:get(children, DemoSup), maps:get(module, C) =:= demo_web_sup],
+    DemoSup = find_tree(demo_sup, Tree),
+    WebSup = find_child(demo_web_sup, DemoSup),
     ?assertEqual(rest_for_one, maps:get(strategy, WebSup)),
     WebChildren = maps:get(children, WebSup),
     ?assertEqual(2, length(WebChildren)),
@@ -122,9 +129,9 @@ demo_web_sup_strategy_test() ->
 demo_handler_sup_strategy_test() ->
     Beams = demo_app_beams(),
     {ok, #{tree := Tree}} = ides_static:supervisor_tree(Beams),
-    [DemoSup] = [T || T <- Tree, maps:get(module, T) =:= demo_sup],
-    [WebSup] = [C || C <- maps:get(children, DemoSup), maps:get(module, C) =:= demo_web_sup],
-    [HandlerSup] = [C || C <- maps:get(children, WebSup), maps:get(module, C) =:= demo_handler_sup],
+    DemoSup = find_tree(demo_sup, Tree),
+    WebSup = find_child(demo_web_sup, DemoSup),
+    HandlerSup = find_child(demo_handler_sup, WebSup),
     ?assertEqual(one_for_all, maps:get(strategy, HandlerSup)),
     HandlerChildren = maps:get(children, HandlerSup),
     ?assertEqual(3, length(HandlerChildren)).
@@ -132,8 +139,8 @@ demo_handler_sup_strategy_test() ->
 demo_db_pool_simple_one_for_one_test() ->
     Beams = demo_app_beams(),
     {ok, #{tree := Tree}} = ides_static:supervisor_tree(Beams),
-    [DemoSup] = [T || T <- Tree, maps:get(module, T) =:= demo_sup],
-    [DBPool] = [C || C <- maps:get(children, DemoSup), maps:get(module, C) =:= demo_db_pool],
+    DemoSup = find_tree(demo_sup, Tree),
+    DBPool = find_child(demo_db_pool, DemoSup),
     ?assertEqual(simple_one_for_one, maps:get(strategy, DBPool)).
 
 demo_kill_graph_test() ->

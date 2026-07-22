@@ -9,7 +9,8 @@ The parser handles the most common OTP supervisor patterns:
 
 - **Literal SupFlags map** — `#{strategy => one_for_one, intensity => 3, period => 10}`
 - **Variable-bound SupFlags** — `SupFlags = #{...}` followed by `{ok, {SupFlags, Children}}`
-- **Literal child spec list** — `[#{id => w1, start => {M,F,A}, restart => permanent, type => worker}]`
+- **Literal child spec list** —
+  `[#{id => w1, start => {M,F,A}, restart => permanent, type => worker}]`
 - **Variable-bound child specs** — `ChildSpec = #{...}, {ok, {SupFlags, [ChildSpec]}}`
 - **Variable-bound children list** — `Children = [...], {ok, {SupFlags, Children}}`
 

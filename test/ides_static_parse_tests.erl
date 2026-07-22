@@ -49,8 +49,10 @@ parse_child_specs_test() ->
         "init([]) ->\n"
         "    SupFlags = #{strategy => one_for_one, intensity => 1, period => 5},\n"
         "    Children = [\n"
-        "        #{id => w1, start => {static_worker, start_link, []}, restart => permanent, type => worker, modules => [static_worker]},\n"
-        "        #{id => w2, start => {static_worker, start_link, []}, restart => transient, type => worker, modules => [static_worker]}\n"
+        "        #{id => w1, start => {static_worker, start_link, []},"
+        " restart => permanent, type => worker, modules => [static_worker]},\n"
+        "        #{id => w2, start => {static_worker, start_link, []},"
+        " restart => transient, type => worker, modules => [static_worker]}\n"
         "    ],\n"
         "    {ok, {SupFlags, Children}}.\n"
     ),
@@ -73,7 +75,8 @@ parse_supervisor_child_type_test() ->
         "init([]) ->\n"
         "    SupFlags = #{strategy => one_for_one, intensity => 1, period => 5},\n"
         "    Children = [\n"
-        "        #{id => sub_sup, start => {test_parse_1, start_link, []}, restart => permanent, type => supervisor, modules => [test_parse_1]}\n"
+        "        #{id => sub_sup, start => {test_parse_1, start_link, []},"
+        " restart => permanent, type => supervisor, modules => [test_parse_1]}\n"
         "    ],\n"
         "    {ok, {SupFlags, Children}}.\n"
     ),
@@ -82,7 +85,11 @@ parse_supervisor_child_type_test() ->
     ?assertEqual(supervisor, maps:get(type, Child)).
 
 parse_no_abstract_code_test() ->
-    Info = #{module => test_no_abstr, attributes => [{behaviour, [supervisor]}], exports => [{init, 1}]},
+    Info = #{
+        module => test_no_abstr,
+        attributes => [{behaviour, [supervisor]}],
+        exports => [{init, 1}]
+    },
     ?assertMatch({error, no_abstract_code}, ides_static_parse:parse_init(Info)).
 
 parse_not_a_supervisor_test() ->

@@ -61,16 +61,16 @@ extract_abstract_code(Chunks) ->
                 {erl_abstract_code, Forms} when is_list(Forms) ->
                     {ok, Forms};
                 {Backend, Metadata} when is_atom(Backend) ->
-                    case proplists:get_value(abstract_code, Metadata) of
-                        {raw_abstract_v1, Code} -> {ok, Code};
-                        _ -> error
-                    end;
+                    get_raw_abstract_code(Metadata);
                 {_Backend, _Backend2, Metadata} ->
-                    case proplists:get_value(abstract_code, Metadata) of
-                        {raw_abstract_v1, Code} -> {ok, Code};
-                        _ -> error
-                    end;
+                    get_raw_abstract_code(Metadata);
                 _ ->
                     error
             end
+    end.
+
+get_raw_abstract_code(Metadata) ->
+    case proplists:get_value(abstract_code, Metadata) of
+        {raw_abstract_v1, Code} -> {ok, Code};
+        _ -> error
     end.
