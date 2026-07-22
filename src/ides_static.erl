@@ -67,7 +67,7 @@ supervisor_tree(BeamPaths) ->
     {ok, #{tree => RootTrees, warnings => Warnings}}.
 
 build_trees(Supervisors, BeamMap) ->
-    maps:fold(
+    {AllTrees, AllWarnings} = maps:fold(
         fun(Module, Info, {TreesAcc, WarnAcc}) ->
             case ides_static_parse:parse_init(Info) of
                 {ok, SupFlags, ChildSpecs} ->
@@ -90,7 +90,20 @@ build_trees(Supervisors, BeamMap) ->
         end,
         {[], []},
         Supervisors
-    ).
+    ),
+    %% Only return root supervisors (not referenced as children of others)
+    AllChildModules = collect_child_modules(AllTrees),
+    RootTrees = [T || T <- AllTrees, not lists:member(maps:get(module, T), AllChildModules)],
+    {RootTrees, AllWarnings}.
+
+collect_child_modules(Trees) ->
+    lists:flatmap(fun collect_modules/1, Trees).
+
+collect_modules(#{children := Children}) ->
+    [maps:get(module, C) || C <- Children] ++
+        lists:flatmap(fun collect_modules/1, Children);
+collect_modules(_) ->
+    [].
 
 build_children(ChildSpecs, BeamMap) ->
     lists:foldl(

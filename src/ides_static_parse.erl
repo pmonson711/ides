@@ -68,7 +68,8 @@ resolve_sup_flags(Other, _Body) ->
     error({dynamic_sup_flags, Other}).
 
 resolve_children({cons, _Line, Head, Tail}, Body) ->
-    [parse_child_spec(Head) | resolve_children(Tail, Body)];
+    Resolved = resolve_child_head(Head, Body),
+    [Resolved | resolve_children(Tail, Body)];
 resolve_children({nil, _Line}, _Body) ->
     [];
 resolve_children({var, _, Name}, Body) ->
@@ -78,6 +79,14 @@ resolve_children({var, _, Name}, Body) ->
     end;
 resolve_children(Other, _Body) ->
     error({dynamic_children, Other}).
+
+resolve_child_head({var, _, Name}, Body) ->
+    case find_match(Name, Body) of
+        {ok, Value} -> parse_child_spec(Value);
+        error -> error({unbound_variable, Name})
+    end;
+resolve_child_head(Expr, _Body) ->
+    parse_child_spec(Expr).
 
 parse_child_spec({map, _, Fields}) ->
     Id = extract_atom_field(Fields, id),
