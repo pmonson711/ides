@@ -390,3 +390,15 @@ find_by_name(Name, [_ | Rest]) ->
     find_by_name(Name, Rest);
 find_by_name(_, []) ->
     {error, not_found}.
+
+find_node(_Module, []) ->
+    error;
+find_node(Module, [#{module := Module} = Node | _]) ->
+    {ok, Node};
+find_node(Module, [#{type := supervisor, children := Children} | Rest]) ->
+    case find_node(Module, Children) of
+        {ok, _} = Found -> Found;
+        error -> find_node(Module, Rest)
+    end;
+find_node(Module, [_ | Rest]) ->
+    find_node(Module, Rest).
