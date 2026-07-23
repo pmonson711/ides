@@ -189,29 +189,15 @@ child_warnings(SupFlags, M, ChildWarnings) ->
     end.
 
 -doc "Return restart intensity policy for a supervisor module.".
--spec intensity_info(module(), [file:filename()]) ->
-    {ok, intensity_info()} | {error, static_error()}.
+-spec intensity_info(module(), t()) ->
+    {ok, intensity_info()} | {error, not_found}.
 
-intensity_info(Module, BeamPaths) ->
-    {ok, BeamMap} = ides_static_beam:load_beams(BeamPaths),
-    case maps:find(Module, BeamMap) of
-        {ok, Info} ->
-            case ides_static_beam:is_supervisor(Info) of
-                true ->
-                    case ides_static_parse:parse_init(Info) of
-                        {ok, SupFlags, _ChildSpecs} ->
-                            {ok, #{
-                                max_restarts => maps:get(intensity, SupFlags),
-                                max_period => maps:get(period, SupFlags)
-                            }};
-                        {error, _Reason} = Err ->
-                            Err
-                    end;
-                false ->
-                    {error, {not_a_supervisor, Module}}
-            end;
-        error ->
-            {error, {missing_beam, Module}}
+intensity_info(Module, #{tree := Trees}) ->
+    case find_node(Module, Trees) of
+        {ok, #{type := supervisor, intensity := Intensity}} ->
+            {ok, Intensity};
+        _ ->
+            {error, not_found}
     end.
 
 -doc "Return all modules that could cause the target module's process to be killed.".
