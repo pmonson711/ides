@@ -201,16 +201,16 @@ intensity_info(Module, #{tree := Trees}) ->
     end.
 
 -doc "Return all modules that could cause the target module's process to be killed.".
--spec kill_graph(module(), [file:filename()]) ->
-    {ok, [module()]} | {error, static_error()}.
+-spec kill_graph(module(), t()) ->
+    {ok, [module()]} | {error, not_found}.
 
-kill_graph(Module, BeamPaths) ->
-    case supervisor_tree(BeamPaths) of
-        {ok, #{tree := Trees}} ->
+kill_graph(Module, #{tree := Trees}) ->
+    case find_node(Module, Trees) of
+        {ok, _} ->
             Killers = find_killers(Module, Trees),
             {ok, Killers};
-        {error, _} = Err ->
-            Err
+        error ->
+            {error, not_found}
     end.
 
 find_killers(Module, Trees) ->
@@ -258,63 +258,39 @@ child_modules_except(Module, Children) ->
     [maps:get(module, C) || C <- Children, maps:get(module, C) =/= Module].
 
 -doc "Return the ancestor supervisor chain for a module, from root to direct parent.".
--spec ancestors(module(), [file:filename()]) ->
-    {ok, [module()]} | {error, static_error()}.
+-spec ancestors(module(), t()) ->
+    {ok, [module()]} | {error, not_found}.
 
-ancestors(Module, BeamPaths) ->
-    case supervisor_tree(BeamPaths) of
-        {ok, #{tree := Trees}} ->
-            case find_ancestors(Module, Trees) of
-                [] -> {error, not_found};
-                Path -> {ok, Path}
-            end;
-        {error, _} = Err ->
-            Err
+ancestors(Module, #{tree := Trees}) ->
+    case find_node(Module, Trees) of
+        {ok, Node} ->
+            Path = ancestor_chain(maps:get(parent, Node), Trees),
+            {ok, Path};
+        error ->
+            {error, not_found}
     end.
 
-find_ancestors(Module, Trees) ->
-    lists:flatmap(fun(T) -> find_ancestors_path(Module, T) end, Trees).
-
-find_ancestors_path(Module, #{type := supervisor, module := Mod, children := Children}) ->
-    case has_child(Module, Children) of
-        true ->
-            [Mod];
-        false ->
-            case lists:flatmap(fun(C) -> find_ancestors_path(Module, C) end, Children) of
-                [] -> [];
-                [_ | _] = InnerPath -> [Mod | InnerPath]
-            end
-    end;
-find_ancestors_path(_Module, _Node) ->
-    [].
+ancestor_chain(undefined, _Trees) ->
+    [];
+ancestor_chain(ParentMod, Trees) ->
+    {ok, ParentNode} = find_node(ParentMod, Trees),
+    ancestor_chain(maps:get(parent, ParentNode), Trees) ++ [ParentMod].
 
 -doc "Return sibling modules (other children of the same parent supervisor).".
--spec siblings(module(), [file:filename()]) ->
-    {ok, [module()]} | {error, static_error()}.
+-spec siblings(module(), t()) ->
+    {ok, [module()]} | {error, not_found}.
 
-siblings(Module, BeamPaths) ->
-    case supervisor_tree(BeamPaths) of
-        {ok, #{tree := Trees}} ->
-            {ok, find_siblings(Module, Trees)};
-        {error, _} = Err ->
-            Err
+siblings(Module, #{tree := Trees}) ->
+    case find_node(Module, Trees) of
+        {ok, #{parent := ParentMod}} when ParentMod =/= undefined ->
+            {ok, ParentNode} = find_node(ParentMod, Trees),
+            Siblings = child_modules_except(Module, maps:get(children, ParentNode)),
+            {ok, Siblings};
+        {ok, _} ->
+            {ok, []};
+        error ->
+            {error, not_found}
     end.
-
-find_siblings(Module, Trees) ->
-    lists:usort(find_siblings_in_trees(Module, Trees)).
-
-find_siblings_in_trees(Module, [#{children := Children} | _] = Trees) ->
-    case has_child(Module, Children) of
-        true ->
-            child_modules_except(Module, Children);
-        false ->
-            lists:flatmap(
-                fun(#{children := Cs}) -> find_siblings_in_trees(Module, Cs) end,
-                Trees
-            )
-    end;
-find_siblings_in_trees(_Module, _Nodes) ->
-    [].
 
 -doc "Render the supervision tree as indented ASCII, marking the target with `*`."
       "Accepts the result map from `supervisor_tree/1` or a plain list of trees.".
