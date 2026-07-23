@@ -262,19 +262,26 @@ child_modules_except(Module, Children) ->
     {ok, [module()]} | {error, not_found}.
 
 ancestors(Module, #{tree := Trees}) ->
-    case find_node(Module, Trees) of
-        {ok, Node} ->
-            Path = ancestor_chain(maps:get(parent, Node), Trees),
-            {ok, Path};
-        error ->
-            {error, not_found}
+    case find_ancestors(Module, Trees) of
+        [] -> {error, not_found};
+        Path -> {ok, Path}
     end.
 
-ancestor_chain(undefined, _Trees) ->
-    [];
-ancestor_chain(ParentMod, Trees) ->
-    {ok, ParentNode} = find_node(ParentMod, Trees),
-    ancestor_chain(maps:get(parent, ParentNode), Trees) ++ [ParentMod].
+find_ancestors(Module, Trees) ->
+    lists:flatmap(fun(T) -> find_ancestors_path(Module, T) end, Trees).
+
+find_ancestors_path(Module, #{type := supervisor, module := Mod, children := Children}) ->
+    case has_child(Module, Children) of
+        true ->
+            [Mod];
+        false ->
+            case lists:flatmap(fun(C) -> find_ancestors_path(Module, C) end, Children) of
+                [] -> [];
+                [_ | _] = InnerPath -> [Mod | InnerPath]
+            end
+    end;
+find_ancestors_path(_Module, _Node) ->
+    [].
 
 -doc "Return sibling modules (other children of the same parent supervisor).".
 -spec siblings(module(), t()) ->
