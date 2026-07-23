@@ -81,10 +81,11 @@ build_trees(Supervisors, BeamMap) ->
         fun(Module, Info, {TreesAcc, WarnAcc}) ->
             case ides_static_parse:parse_init(Info) of
                 {ok, SupFlags, ChildSpecs} ->
-                    {Children, ChildWarnings} = build_children(ChildSpecs, BeamMap),
+                    {Children, ChildWarnings} = build_children(ChildSpecs, BeamMap, Module),
                     Tree = #{
                         name => atom_to_list(Module),
                         module => Module,
+                        parent => undefined,
                         type => supervisor,
                         strategy => maps:get(strategy, SupFlags),
                         children => Children,
@@ -115,17 +116,17 @@ collect_modules(#{children := Children}) ->
 collect_modules(_) ->
     [].
 
-build_children(ChildSpecs, BeamMap) ->
+build_children(ChildSpecs, BeamMap, ParentModule) ->
     lists:foldl(
         fun(Child, {KidsAcc, WarnAcc}) ->
-            {Kid, Warns} = build_child(Child, BeamMap),
+            {Kid, Warns} = build_child(Child, BeamMap, ParentModule),
             {KidsAcc ++ [Kid], WarnAcc ++ Warns}
         end,
         {[], []},
         ChildSpecs
     ).
 
-build_child(Child, BeamMap) ->
+build_child(Child, BeamMap, ParentModule) ->
     {M, _F, _A} = maps:get(start, Child),
     case maps:get(type, Child) of
         supervisor ->
@@ -133,11 +134,12 @@ build_child(Child, BeamMap) ->
                 {ok, Info} ->
                     case ides_static_parse:parse_init(Info) of
                         {ok, SupFlags, ChildSpecs} ->
-                            {Children, ChildWarnings} = build_children(ChildSpecs, BeamMap),
+                            {Children, ChildWarnings} = build_children(ChildSpecs, BeamMap, M),
                             Warns = child_warnings(SupFlags, M, ChildWarnings),
                             Result = #{
                                 name => atom_to_list(maps:get(id, Child)),
                                 module => M,
+                                parent => ParentModule,
                                 type => supervisor,
                                 strategy => maps:get(strategy, SupFlags),
                                 restart_type => maps:get(restart, Child),
@@ -152,6 +154,7 @@ build_child(Child, BeamMap) ->
                             {#{
                                 name => atom_to_list(maps:get(id, Child)),
                                 module => M,
+                                parent => ParentModule,
                                 type => worker,
                                 restart_type => maps:get(restart, Child)
                             }, []}
@@ -160,6 +163,7 @@ build_child(Child, BeamMap) ->
                     {#{
                         name => atom_to_list(maps:get(id, Child)),
                         module => M,
+                        parent => ParentModule,
                         type => worker,
                         restart_type => maps:get(restart, Child)
                     }, [{unresolvable_module, M}]}
@@ -172,6 +176,7 @@ build_child(Child, BeamMap) ->
             {#{
                 name => atom_to_list(maps:get(id, Child)),
                 module => M,
+                parent => ParentModule,
                 type => worker,
                 restart_type => maps:get(restart, Child)
             }, Warns}
