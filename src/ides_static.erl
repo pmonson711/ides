@@ -12,6 +12,7 @@
 ]).
 
 -export_type([
+    t/0,
     worker_process/0,
     supervisor_process/0,
     static_process/0,
@@ -24,6 +25,7 @@
 -type worker_process() :: #{
     name := string(),
     module := module(),
+    parent := module() | undefined,
     type := worker,
     restart_type := ides:child_restart_type()
 }.
@@ -31,6 +33,7 @@
 -type supervisor_process() :: #{
     name := string(),
     module := module(),
+    parent := module() | undefined,
     type := supervisor,
     strategy := ides:supervisor_strategy(),
     restart_type => ides:child_restart_type(),
@@ -39,6 +42,11 @@
 }.
 
 -type static_process() :: supervisor_process() | worker_process().
+
+-type t() :: #{
+    tree := [static_process()],
+    warnings := [static_warning()]
+}.
 
 -type intensity_info() :: #{
     max_restarts := non_neg_integer(),
