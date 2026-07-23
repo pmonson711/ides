@@ -292,13 +292,10 @@ siblings(Module, #{tree := Trees}) ->
             {error, not_found}
     end.
 
--doc "Render the supervision tree as indented ASCII, marking the target with `*`."
-      "Accepts the result map from `supervisor_tree/1` or a plain list of trees.".
--spec format(module(), #{tree := [static_process()]} | [static_process()]) -> iolist().
+-doc "Render the supervision tree as indented ASCII, marking the target with `*`.".
+-spec format(module(), t()) -> iolist().
 
 format(Module, #{tree := Trees}) ->
-    [format_node(Module, T, 0) || T <- Trees];
-format(Module, Trees) ->
     [format_node(Module, T, 0) || T <- Trees].
 
 format_node(
@@ -328,17 +325,16 @@ format_prefix(Module, #{module := Module}, Depth) ->
 format_prefix(_Module, _Node, Depth) ->
     lists:duplicate(Depth * 4 - 2, $\s) ++ "  ".
 
--doc "Like `format/2` but writes to stdout."
-      "Accepts the result map from `supervisor_tree/1` or a plain list of trees.".
--spec print(module(), #{tree := [static_process()]} | [static_process()]) -> ok.
+-doc "Like `format/2` but writes to stdout.".
+-spec print(module(), t()) -> ok.
 
 print(Module, Trees) ->
     io:format("~s", [format(Module, Trees)]).
 
 -doc "Look up a module by its registered process name in the tree.".
--spec find_process_by_name(string(), [static_process()]) -> {ok, module()} | {error, not_found}.
+-spec find_process_by_name(string(), t()) -> {ok, module()} | {error, not_found}.
 
-find_process_by_name(Name, Trees) ->
+find_process_by_name(Name, #{tree := Trees}) ->
     find_by_name(Name, Trees).
 
 find_by_name(Name, [#{name := Name, module := Mod} | _]) ->
