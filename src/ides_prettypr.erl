@@ -26,7 +26,7 @@ print(TargetPid, Tree) ->
 %% --- Internal ---
 
 -spec format_node(TargetPid :: pid(), Node :: ides_family:process(), Depth :: non_neg_integer()) ->
-    prettypr:doc().
+    term().
 format_node(
     TargetPid,
     #{
@@ -75,10 +75,12 @@ format_node(
     Depth :: non_neg_integer(),
     Strategy :: atom(),
     RestartType :: atom()
-) -> prettypr:doc().
+) -> term().
 format_supervisor_line(TargetPid, Pid, Name, Depth, Strategy, RestartType) ->
     Prefix = line_prefix(TargetPid, Pid, Depth),
-    Anno = [" (", atom_to_list(Strategy), ", ", atom_to_list(RestartType), intensity_suffix(Pid), ")"],
+    Anno = [
+        " (", atom_to_list(Strategy), ", ", atom_to_list(RestartType), intensity_suffix(Pid), ")"
+    ],
     prettypr:text(Prefix ++ Name ++ Anno).
 
 -spec format_supervisor_line(
@@ -87,7 +89,7 @@ format_supervisor_line(TargetPid, Pid, Name, Depth, Strategy, RestartType) ->
     Name :: string(),
     Depth :: non_neg_integer(),
     Strategy :: atom()
-) -> prettypr:doc().
+) -> term().
 format_supervisor_line(TargetPid, Pid, Name, Depth, Strategy) ->
     Prefix = line_prefix(TargetPid, Pid, Depth),
     Anno = [" (", atom_to_list(Strategy), intensity_suffix(Pid), ")"],
@@ -95,10 +97,10 @@ format_supervisor_line(TargetPid, Pid, Name, Depth, Strategy) ->
 
 -spec format_children(
     TargetPid :: pid(),
-    Line :: prettypr:doc(),
+    Line :: term(),
     Children :: [ides_family:process()],
     Depth :: non_neg_integer()
-) -> prettypr:doc().
+) -> term().
 format_children(_TargetPid, Line, [], _Depth) ->
     Line;
 format_children(TargetPid, Line, Children, Depth) ->
