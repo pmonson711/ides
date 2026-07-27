@@ -17,10 +17,11 @@
 -spec is_supervisor(beam_info()) -> boolean().
 is_supervisor(#{attributes := Attrs}) ->
     lists:any(
-        fun({behaviour, Behaviours}) ->
-            lists:member(supervisor, Behaviours);
-           (_) ->
-            false
+        fun
+            ({behaviour, Behaviours}) ->
+                lists:member(supervisor, Behaviours);
+            (_) ->
+                false
         end,
         Attrs
     ).
@@ -41,10 +42,11 @@ load_beam(Path, Acc) ->
                 attributes => Attrs,
                 exports => Exports
             },
-            Info2 = case extract_abstract_code(Chunks) of
-                {ok, Code} -> Info#{abstract_code => Code};
-                error -> Info
-            end,
+            Info2 =
+                case extract_abstract_code(Chunks) of
+                    {ok, Code} -> Info#{abstract_code => Code};
+                    error -> Info
+                end,
             Acc#{Module => Info2};
         _ ->
             Acc

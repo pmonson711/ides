@@ -72,8 +72,10 @@ format_test() ->
 not_a_supervisor_error_test() ->
     Beams = support_beams(),
     {ok, Tree} = ides_static:supervisor_tree(Beams),
-    ?assertMatch({error, not_found},
-                 ides_static:intensity_info(static_worker, Tree)).
+    ?assertMatch(
+        {error, not_found},
+        ides_static:intensity_info(static_worker, Tree)
+    ).
 
 missing_beam_warning_test() ->
     {ok, #{tree := Tree}} = ides_static:supervisor_tree(["/nonexistent/path/to/beam"]),
@@ -82,14 +84,18 @@ missing_beam_warning_test() ->
 find_process_by_name_test() ->
     Beams = support_beams(),
     {ok, Tree} = ides_static:supervisor_tree(Beams),
-    ?assertMatch({ok, static_one_for_one_sup},
-                 ides_static:find_process_by_name("static_one_for_one_sup", Tree)).
+    ?assertMatch(
+        {ok, static_one_for_one_sup},
+        ides_static:find_process_by_name("static_one_for_one_sup", Tree)
+    ).
 
 find_process_by_name_not_found_test() ->
     Beams = support_beams(),
     {ok, Tree} = ides_static:supervisor_tree(Beams),
-    ?assertMatch({error, not_found},
-                 ides_static:find_process_by_name("nonexistent", Tree)).
+    ?assertMatch(
+        {error, not_found},
+        ides_static:find_process_by_name("nonexistent", Tree)
+    ).
 
 parent_field_test() ->
     Beams = support_beams(),
@@ -102,8 +108,10 @@ parent_field_test() ->
 find_process_by_name_with_t_test() ->
     Beams = support_beams(),
     {ok, Tree} = ides_static:supervisor_tree(Beams),
-    ?assertMatch({ok, static_one_for_one_sup},
-                 ides_static:find_process_by_name("static_one_for_one_sup", Tree)).
+    ?assertMatch(
+        {ok, static_one_for_one_sup},
+        ides_static:find_process_by_name("static_one_for_one_sup", Tree)
+    ).
 
 %% --- Demo app integration tests ---
 

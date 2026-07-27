@@ -55,18 +55,20 @@
 
 -type kill_source() :: {ancestor, module()} | {sibling, module()}.
 
--type static_error() :: {missing_beam, module()}
-                      | {no_debug_info, module()}
-                      | {not_a_supervisor, module()}
-                      | {dynamic_child_spec, module()}
-                      | {unresolvable_module, module()}.
+-type static_error() ::
+    {missing_beam, module()}
+    | {no_debug_info, module()}
+    | {not_a_supervisor, module()}
+    | {dynamic_child_spec, module()}
+    | {unresolvable_module, module()}.
 
--type static_warning() :: {unresolvable_module, module()}
-                        | {dynamic_child_spec, module()}
-                        | {missing_behaviour, module()}.
+-type static_warning() ::
+    {unresolvable_module, module()}
+    | {dynamic_child_spec, module()}
+    | {missing_behaviour, module()}.
 
 -doc "Build the static supervision tree from BEAM files."
-      "Returns tree roots and any warnings (unresolvable modules, dynamic children).".
+"Returns tree roots and any warnings (unresolvable modules, dynamic children).".
 -spec supervisor_tree([file:filename()]) ->
     {ok, #{tree := [static_process()], warnings := [static_warning()]}} | {error, static_error()}.
 
@@ -151,35 +153,45 @@ build_child(Child, BeamMap, ParentModule) ->
                             },
                             {Result, Warns};
                         {error, _} ->
-                            {#{
-                                name => atom_to_list(maps:get(id, Child)),
-                                module => M,
-                                parent => ParentModule,
-                                type => worker,
-                                restart_type => maps:get(restart, Child)
-                            }, []}
+                            {
+                                #{
+                                    name => atom_to_list(maps:get(id, Child)),
+                                    module => M,
+                                    parent => ParentModule,
+                                    type => worker,
+                                    restart_type => maps:get(restart, Child)
+                                },
+                                []
+                            }
                     end;
                 error ->
-                    {#{
-                        name => atom_to_list(maps:get(id, Child)),
-                        module => M,
-                        parent => ParentModule,
-                        type => worker,
-                        restart_type => maps:get(restart, Child)
-                    }, [{unresolvable_module, M}]}
+                    {
+                        #{
+                            name => atom_to_list(maps:get(id, Child)),
+                            module => M,
+                            parent => ParentModule,
+                            type => worker,
+                            restart_type => maps:get(restart, Child)
+                        },
+                        [{unresolvable_module, M}]
+                    }
             end;
         worker ->
-            Warns = case maps:find(M, BeamMap) of
-                {ok, _} -> [];
-                error -> [{unresolvable_module, M}]
-            end,
-            {#{
-                name => atom_to_list(maps:get(id, Child)),
-                module => M,
-                parent => ParentModule,
-                type => worker,
-                restart_type => maps:get(restart, Child)
-            }, Warns}
+            Warns =
+                case maps:find(M, BeamMap) of
+                    {ok, _} -> [];
+                    error -> [{unresolvable_module, M}]
+                end,
+            {
+                #{
+                    name => atom_to_list(maps:get(id, Child)),
+                    module => M,
+                    parent => ParentModule,
+                    type => worker,
+                    restart_type => maps:get(restart, Child)
+                },
+                Warns
+            }
     end.
 
 child_warnings(SupFlags, M, ChildWarnings) ->
@@ -311,13 +323,17 @@ format_node(
     Depth
 ) ->
     Name = maps:get(name, Node, atom_to_list(maps:get(module, Node))),
-    Anno = case maps:find(restart_type, Node) of
-        {ok, Restart} -> [" (", atom_to_list(Strategy), ", ", atom_to_list(Restart), ")"];
-        error -> [" (", atom_to_list(Strategy), ")"]
-    end,
+    Anno =
+        case maps:find(restart_type, Node) of
+            {ok, Restart} -> [" (", atom_to_list(Strategy), ", ", atom_to_list(Restart), ")"];
+            error -> [" (", atom_to_list(Strategy), ")"]
+        end,
     Prefix = format_prefix(Module, Node, Depth),
     [
-        Prefix, Name, Anno, "\n"
+        Prefix,
+        Name,
+        Anno,
+        "\n"
         | [format_node(Module, C, Depth + 1) || C <- Children]
     ];
 format_node(Module, #{type := worker, restart_type := Restart} = Node, Depth) ->

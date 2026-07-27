@@ -10,7 +10,8 @@ compile_test_beam(ModuleName, SourceBody) ->
     Beam.
 
 load_supervisor_beam_test() ->
-    BeamFile = compile_test_beam(test_beam_sup,
+    BeamFile = compile_test_beam(
+        test_beam_sup,
         "-module(test_beam_sup).\n"
         "-behaviour(supervisor).\n"
         "-export([start_link/0, init/1]).\n"
@@ -26,7 +27,8 @@ load_supervisor_beam_test() ->
     ?assert(is_list(maps:get(abstract_code, Info))).
 
 load_non_supervisor_beam_test() ->
-    BeamFile = compile_test_beam(test_beam_gen,
+    BeamFile = compile_test_beam(
+        test_beam_gen,
         "-module(test_beam_gen).\n"
         "-behaviour(gen_server).\n"
         "-export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2]).\n"
@@ -40,7 +42,8 @@ load_non_supervisor_beam_test() ->
     ?assert(maps:is_key(test_beam_gen, BeamMap)).
 
 is_supervisor_test() ->
-    SupCode = compile_test_beam(test_sup_check,
+    SupCode = compile_test_beam(
+        test_sup_check,
         "-module(test_sup_check).\n"
         "-behaviour(supervisor).\n"
         "-export([start_link/0, init/1]).\n"
@@ -52,7 +55,8 @@ is_supervisor_test() ->
     ?assert(ides_static_beam:is_supervisor(Info)).
 
 is_not_supervisor_test() ->
-    GenCode = compile_test_beam(test_not_sup,
+    GenCode = compile_test_beam(
+        test_not_sup,
         "-module(test_not_sup).\n"
         "-behaviour(gen_server).\n"
         "-export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2]).\n"

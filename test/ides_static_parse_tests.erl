@@ -11,7 +11,8 @@ compile_test_beam(ModuleName, SourceBody) ->
     Info.
 
 parse_one_for_one_sup_flags_test() ->
-    Info = compile_test_beam(test_parse_1,
+    Info = compile_test_beam(
+        test_parse_1,
         "-module(test_parse_1).\n"
         "-behaviour(supervisor).\n"
         "-export([start_link/0, init/1]).\n"
@@ -26,7 +27,8 @@ parse_one_for_one_sup_flags_test() ->
     ?assertEqual(10, maps:get(period, SupFlags)).
 
 parse_simple_one_for_one_test() ->
-    Info = compile_test_beam(test_parse_s1o1,
+    Info = compile_test_beam(
+        test_parse_s1o1,
         "-module(test_parse_s1o1).\n"
         "-behaviour(supervisor).\n"
         "-export([start_link/0, init/1]).\n"
@@ -41,7 +43,8 @@ parse_simple_one_for_one_test() ->
     ?assertEqual(60, maps:get(period, SupFlags)).
 
 parse_child_specs_test() ->
-    Info = compile_test_beam(test_parse_kids,
+    Info = compile_test_beam(
+        test_parse_kids,
         "-module(test_parse_kids).\n"
         "-behaviour(supervisor).\n"
         "-export([start_link/0, init/1]).\n"
@@ -67,7 +70,8 @@ parse_child_specs_test() ->
     ?assertEqual(transient, maps:get(restart, Child2)).
 
 parse_supervisor_child_type_test() ->
-    Info = compile_test_beam(test_parse_sup_child,
+    Info = compile_test_beam(
+        test_parse_sup_child,
         "-module(test_parse_sup_child).\n"
         "-behaviour(supervisor).\n"
         "-export([start_link/0, init/1]).\n"
@@ -93,7 +97,8 @@ parse_no_abstract_code_test() ->
     ?assertMatch({error, no_abstract_code}, ides_static_parse:parse_init(Info)).
 
 parse_not_a_supervisor_test() ->
-    Info = compile_test_beam(test_not_sup_parse,
+    Info = compile_test_beam(
+        test_not_sup_parse,
         "-module(test_not_sup_parse).\n"
         "-export([init/1]).\n"
         "init([]) -> {ok, #{}}.\n"
