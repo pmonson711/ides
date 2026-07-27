@@ -19,7 +19,9 @@ Uses OTP primitives: `erlang:process_info/2` for `$ancestors`,
 -export([
     ancestors/1,
     format/2,
+    format_pretty/2,
     print/2,
+    print_pretty/2,
     kill_graph/1,
     should_restart/2,
     affected_siblings/1,
@@ -121,3 +123,11 @@ format_init_analysis(Result) ->
 -spec print_init_analysis(Result :: ides_family:init_analysis_result()) -> ok.
 print_init_analysis(Result) ->
     ides_printer:print_init_analysis(Result).
+
+-spec format_pretty(TargetPid :: pid(), Tree :: process()) -> iolist().
+format_pretty(TargetPid, Tree) ->
+    ides_prettypr:format(TargetPid, Tree).
+
+-spec print_pretty(TargetPid :: pid(), Tree :: process()) -> ok.
+print_pretty(TargetPid, Tree) ->
+    ides_prettypr:print(TargetPid, Tree).
