@@ -3,6 +3,7 @@ erlang = "28"
 java = "latest"
 "github:WhatsApp/erlang-language-platform" = "latest"
 rebar = "latest"
+hk = "latest"
 
 [tasks.all]
 depends = ["build", "test", "lint"]

@@ -12,6 +12,7 @@
 ]).
 
 -export_type([
+    t/0,
     worker_process/0,
     supervisor_process/0,
     static_process/0,
@@ -24,6 +25,7 @@
 -type worker_process() :: #{
     name := string(),
     module := module(),
+    parent := module() | undefined,
     type := worker,
     restart_type := ides:child_restart_type()
 }.
@@ -31,6 +33,7 @@
 -type supervisor_process() :: #{
     name := string(),
     module := module(),
+    parent := module() | undefined,
     type := supervisor,
     strategy := ides:supervisor_strategy(),
     restart_type => ides:child_restart_type(),
@@ -40,6 +43,11 @@
 
 -type static_process() :: supervisor_process() | worker_process().
 
+-type t() :: #{
+    tree := [static_process()],
+    warnings := [static_warning()]
+}.
+
 -type intensity_info() :: #{
     max_restarts := non_neg_integer(),
     max_period := non_neg_integer()
@@ -47,18 +55,20 @@
 
 -type kill_source() :: {ancestor, module()} | {sibling, module()}.
 
--type static_error() :: {missing_beam, module()}
-                      | {no_debug_info, module()}
-                      | {not_a_supervisor, module()}
-                      | {dynamic_child_spec, module()}
-                      | {unresolvable_module, module()}.
+-type static_error() ::
+    {missing_beam, module()}
+    | {no_debug_info, module()}
+    | {not_a_supervisor, module()}
+    | {dynamic_child_spec, module()}
+    | {unresolvable_module, module()}.
 
--type static_warning() :: {unresolvable_module, module()}
-                        | {dynamic_child_spec, module()}
-                        | {missing_behaviour, module()}.
+-type static_warning() ::
+    {unresolvable_module, module()}
+    | {dynamic_child_spec, module()}
+    | {missing_behaviour, module()}.
 
 -doc "Build the static supervision tree from BEAM files."
-      "Returns tree roots and any warnings (unresolvable modules, dynamic children).".
+"Returns tree roots and any warnings (unresolvable modules, dynamic children).".
 -spec supervisor_tree([file:filename()]) ->
     {ok, #{tree := [static_process()], warnings := [static_warning()]}} | {error, static_error()}.
 
@@ -73,10 +83,11 @@ build_trees(Supervisors, BeamMap) ->
         fun(Module, Info, {TreesAcc, WarnAcc}) ->
             case ides_static_parse:parse_init(Info) of
                 {ok, SupFlags, ChildSpecs} ->
-                    {Children, ChildWarnings} = build_children(ChildSpecs, BeamMap),
+                    {Children, ChildWarnings} = build_children(ChildSpecs, BeamMap, Module),
                     Tree = #{
                         name => atom_to_list(Module),
                         module => Module,
+                        parent => undefined,
                         type => supervisor,
                         strategy => maps:get(strategy, SupFlags),
                         children => Children,
@@ -107,17 +118,17 @@ collect_modules(#{children := Children}) ->
 collect_modules(_) ->
     [].
 
-build_children(ChildSpecs, BeamMap) ->
+build_children(ChildSpecs, BeamMap, ParentModule) ->
     lists:foldl(
         fun(Child, {KidsAcc, WarnAcc}) ->
-            {Kid, Warns} = build_child(Child, BeamMap),
+            {Kid, Warns} = build_child(Child, BeamMap, ParentModule),
             {KidsAcc ++ [Kid], WarnAcc ++ Warns}
         end,
         {[], []},
         ChildSpecs
     ).
 
-build_child(Child, BeamMap) ->
+build_child(Child, BeamMap, ParentModule) ->
     {M, _F, _A} = maps:get(start, Child),
     case maps:get(type, Child) of
         supervisor ->
@@ -125,11 +136,12 @@ build_child(Child, BeamMap) ->
                 {ok, Info} ->
                     case ides_static_parse:parse_init(Info) of
                         {ok, SupFlags, ChildSpecs} ->
-                            {Children, ChildWarnings} = build_children(ChildSpecs, BeamMap),
+                            {Children, ChildWarnings} = build_children(ChildSpecs, BeamMap, M),
                             Warns = child_warnings(SupFlags, M, ChildWarnings),
                             Result = #{
                                 name => atom_to_list(maps:get(id, Child)),
                                 module => M,
+                                parent => ParentModule,
                                 type => supervisor,
                                 strategy => maps:get(strategy, SupFlags),
                                 restart_type => maps:get(restart, Child),
@@ -141,32 +153,45 @@ build_child(Child, BeamMap) ->
                             },
                             {Result, Warns};
                         {error, _} ->
-                            {#{
-                                name => atom_to_list(maps:get(id, Child)),
-                                module => M,
-                                type => worker,
-                                restart_type => maps:get(restart, Child)
-                            }, []}
+                            {
+                                #{
+                                    name => atom_to_list(maps:get(id, Child)),
+                                    module => M,
+                                    parent => ParentModule,
+                                    type => worker,
+                                    restart_type => maps:get(restart, Child)
+                                },
+                                []
+                            }
                     end;
                 error ->
-                    {#{
-                        name => atom_to_list(maps:get(id, Child)),
-                        module => M,
-                        type => worker,
-                        restart_type => maps:get(restart, Child)
-                    }, [{unresolvable_module, M}]}
+                    {
+                        #{
+                            name => atom_to_list(maps:get(id, Child)),
+                            module => M,
+                            parent => ParentModule,
+                            type => worker,
+                            restart_type => maps:get(restart, Child)
+                        },
+                        [{unresolvable_module, M}]
+                    }
             end;
         worker ->
-            Warns = case maps:find(M, BeamMap) of
-                {ok, _} -> [];
-                error -> [{unresolvable_module, M}]
-            end,
-            {#{
-                name => atom_to_list(maps:get(id, Child)),
-                module => M,
-                type => worker,
-                restart_type => maps:get(restart, Child)
-            }, Warns}
+            Warns =
+                case maps:find(M, BeamMap) of
+                    {ok, _} -> [];
+                    error -> [{unresolvable_module, M}]
+                end,
+            {
+                #{
+                    name => atom_to_list(maps:get(id, Child)),
+                    module => M,
+                    parent => ParentModule,
+                    type => worker,
+                    restart_type => maps:get(restart, Child)
+                },
+                Warns
+            }
     end.
 
 child_warnings(SupFlags, M, ChildWarnings) ->
@@ -176,42 +201,28 @@ child_warnings(SupFlags, M, ChildWarnings) ->
     end.
 
 -doc "Return restart intensity policy for a supervisor module.".
--spec intensity_info(module(), [file:filename()]) ->
-    {ok, intensity_info()} | {error, static_error()}.
+-spec intensity_info(module(), t()) ->
+    {ok, intensity_info()} | {error, not_found}.
 
-intensity_info(Module, BeamPaths) ->
-    {ok, BeamMap} = ides_static_beam:load_beams(BeamPaths),
-    case maps:find(Module, BeamMap) of
-        {ok, Info} ->
-            case ides_static_beam:is_supervisor(Info) of
-                true ->
-                    case ides_static_parse:parse_init(Info) of
-                        {ok, SupFlags, _ChildSpecs} ->
-                            {ok, #{
-                                max_restarts => maps:get(intensity, SupFlags),
-                                max_period => maps:get(period, SupFlags)
-                            }};
-                        {error, _Reason} = Err ->
-                            Err
-                    end;
-                false ->
-                    {error, {not_a_supervisor, Module}}
-            end;
-        error ->
-            {error, {missing_beam, Module}}
+intensity_info(Module, #{tree := Trees}) ->
+    case find_node(Module, Trees) of
+        {ok, #{type := supervisor, intensity := Intensity}} ->
+            {ok, Intensity};
+        _ ->
+            {error, not_found}
     end.
 
 -doc "Return all modules that could cause the target module's process to be killed.".
--spec kill_graph(module(), [file:filename()]) ->
-    {ok, [module()]} | {error, static_error()}.
+-spec kill_graph(module(), t()) ->
+    {ok, [module()]} | {error, not_found}.
 
-kill_graph(Module, BeamPaths) ->
-    case supervisor_tree(BeamPaths) of
-        {ok, #{tree := Trees}} ->
+kill_graph(Module, #{tree := Trees}) ->
+    case find_node(Module, Trees) of
+        {ok, _} ->
             Killers = find_killers(Module, Trees),
             {ok, Killers};
-        {error, _} = Err ->
-            Err
+        error ->
+            {error, not_found}
     end.
 
 find_killers(Module, Trees) ->
@@ -259,18 +270,13 @@ child_modules_except(Module, Children) ->
     [maps:get(module, C) || C <- Children, maps:get(module, C) =/= Module].
 
 -doc "Return the ancestor supervisor chain for a module, from root to direct parent.".
--spec ancestors(module(), [file:filename()]) ->
-    {ok, [module()]} | {error, static_error()}.
+-spec ancestors(module(), t()) ->
+    {ok, [module()]} | {error, not_found}.
 
-ancestors(Module, BeamPaths) ->
-    case supervisor_tree(BeamPaths) of
-        {ok, #{tree := Trees}} ->
-            case find_ancestors(Module, Trees) of
-                [] -> {error, not_found};
-                Path -> {ok, Path}
-            end;
-        {error, _} = Err ->
-            Err
+ancestors(Module, #{tree := Trees}) ->
+    case find_ancestors(Module, Trees) of
+        [] -> {error, not_found};
+        Path -> {ok, Path}
     end.
 
 find_ancestors(Module, Trees) ->
@@ -290,40 +296,25 @@ find_ancestors_path(_Module, _Node) ->
     [].
 
 -doc "Return sibling modules (other children of the same parent supervisor).".
--spec siblings(module(), [file:filename()]) ->
-    {ok, [module()]} | {error, static_error()}.
+-spec siblings(module(), t()) ->
+    {ok, [module()]} | {error, not_found}.
 
-siblings(Module, BeamPaths) ->
-    case supervisor_tree(BeamPaths) of
-        {ok, #{tree := Trees}} ->
-            {ok, find_siblings(Module, Trees)};
-        {error, _} = Err ->
-            Err
+siblings(Module, #{tree := Trees}) ->
+    case find_node(Module, Trees) of
+        {ok, #{parent := ParentMod}} when ParentMod =/= undefined ->
+            {ok, ParentNode} = find_node(ParentMod, Trees),
+            Siblings = child_modules_except(Module, maps:get(children, ParentNode)),
+            {ok, Siblings};
+        {ok, _} ->
+            {ok, []};
+        error ->
+            {error, not_found}
     end.
 
-find_siblings(Module, Trees) ->
-    lists:usort(find_siblings_in_trees(Module, Trees)).
-
-find_siblings_in_trees(Module, [#{children := Children} | _] = Trees) ->
-    case has_child(Module, Children) of
-        true ->
-            child_modules_except(Module, Children);
-        false ->
-            lists:flatmap(
-                fun(#{children := Cs}) -> find_siblings_in_trees(Module, Cs) end,
-                Trees
-            )
-    end;
-find_siblings_in_trees(_Module, _Nodes) ->
-    [].
-
--doc "Render the supervision tree as indented ASCII, marking the target with `*`."
-      "Accepts the result map from `supervisor_tree/1` or a plain list of trees.".
--spec format(module(), #{tree := [static_process()]} | [static_process()]) -> iolist().
+-doc "Render the supervision tree as indented ASCII, marking the target with `*`.".
+-spec format(module(), t()) -> iolist().
 
 format(Module, #{tree := Trees}) ->
-    [format_node(Module, T, 0) || T <- Trees];
-format(Module, Trees) ->
     [format_node(Module, T, 0) || T <- Trees].
 
 format_node(
@@ -332,13 +323,17 @@ format_node(
     Depth
 ) ->
     Name = maps:get(name, Node, atom_to_list(maps:get(module, Node))),
-    Anno = case maps:find(restart_type, Node) of
-        {ok, Restart} -> [" (", atom_to_list(Strategy), ", ", atom_to_list(Restart), ")"];
-        error -> [" (", atom_to_list(Strategy), ")"]
-    end,
+    Anno =
+        case maps:find(restart_type, Node) of
+            {ok, Restart} -> [" (", atom_to_list(Strategy), ", ", atom_to_list(Restart), ")"];
+            error -> [" (", atom_to_list(Strategy), ")"]
+        end,
     Prefix = format_prefix(Module, Node, Depth),
     [
-        Prefix, Name, Anno, "\n"
+        Prefix,
+        Name,
+        Anno,
+        "\n"
         | [format_node(Module, C, Depth + 1) || C <- Children]
     ];
 format_node(Module, #{type := worker, restart_type := Restart} = Node, Depth) ->
@@ -353,17 +348,16 @@ format_prefix(Module, #{module := Module}, Depth) ->
 format_prefix(_Module, _Node, Depth) ->
     lists:duplicate(Depth * 4 - 2, $\s) ++ "  ".
 
--doc "Like `format/2` but writes to stdout."
-      "Accepts the result map from `supervisor_tree/1` or a plain list of trees.".
--spec print(module(), #{tree := [static_process()]} | [static_process()]) -> ok.
+-doc "Like `format/2` but writes to stdout.".
+-spec print(module(), t()) -> ok.
 
 print(Module, Trees) ->
     io:format("~s", [format(Module, Trees)]).
 
 -doc "Look up a module by its registered process name in the tree.".
--spec find_process_by_name(string(), [static_process()]) -> {ok, module()} | {error, not_found}.
+-spec find_process_by_name(string(), t()) -> {ok, module()} | {error, not_found}.
 
-find_process_by_name(Name, Trees) ->
+find_process_by_name(Name, #{tree := Trees}) ->
     find_by_name(Name, Trees).
 
 find_by_name(Name, [#{name := Name, module := Mod} | _]) ->
@@ -377,3 +371,15 @@ find_by_name(Name, [_ | Rest]) ->
     find_by_name(Name, Rest);
 find_by_name(_, []) ->
     {error, not_found}.
+
+find_node(_Module, []) ->
+    error;
+find_node(Module, [#{module := Module} = Node | _]) ->
+    {ok, Node};
+find_node(Module, [#{type := supervisor, children := Children} | Rest]) ->
+    case find_node(Module, Children) of
+        {ok, _} = Found -> Found;
+        error -> find_node(Module, Rest)
+    end;
+find_node(Module, [_ | Rest]) ->
+    find_node(Module, Rest).

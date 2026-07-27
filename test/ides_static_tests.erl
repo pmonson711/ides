@@ -38,37 +38,44 @@ supervisor_tree_specific_module_test() ->
 
 intensity_info_test() ->
     Beams = support_beams(),
-    {ok, Intensity} = ides_static:intensity_info(static_one_for_one_sup, Beams),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    {ok, Intensity} = ides_static:intensity_info(static_one_for_one_sup, Tree),
     ?assertEqual(3, maps:get(max_restarts, Intensity)),
     ?assertEqual(10, maps:get(max_period, Intensity)).
 
 kill_graph_test() ->
     Beams = support_beams(),
-    {ok, Killers} = ides_static:kill_graph(static_worker, Beams),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    {ok, Killers} = ides_static:kill_graph(static_worker, Tree),
     ?assertEqual(2, length(Killers)),
     ?assert(lists:member(static_all_strategies_sup, Killers)),
     ?assert(lists:member(static_one_for_one_sup, Killers)).
 
 ancestors_test() ->
     Beams = support_beams(),
-    {ok, Ancestors} = ides_static:ancestors(static_worker, Beams),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    {ok, Ancestors} = ides_static:ancestors(static_worker, Tree),
     ?assertEqual(2, length(Ancestors)).
 
 siblings_test() ->
     Beams = support_beams(),
-    {ok, Siblings} = ides_static:siblings(static_worker, Beams),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    {ok, Siblings} = ides_static:siblings(static_worker, Tree),
     ?assert(is_list(Siblings)).
 
 format_test() ->
     Beams = support_beams(),
-    {ok, #{tree := Tree}} = ides_static:supervisor_tree(Beams),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
     Output = lists:flatten(ides_static:format(static_worker, Tree)),
     ?assert(string:str(Output, "static_one_for_one_sup") > 0).
 
 not_a_supervisor_error_test() ->
     Beams = support_beams(),
-    ?assertMatch({error, {not_a_supervisor, _}},
-                 ides_static:intensity_info(static_worker, Beams)).
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    ?assertMatch(
+        {error, not_found},
+        ides_static:intensity_info(static_worker, Tree)
+    ).
 
 missing_beam_warning_test() ->
     {ok, #{tree := Tree}} = ides_static:supervisor_tree(["/nonexistent/path/to/beam"]),
@@ -76,15 +83,35 @@ missing_beam_warning_test() ->
 
 find_process_by_name_test() ->
     Beams = support_beams(),
-    {ok, #{tree := Tree}} = ides_static:supervisor_tree(Beams),
-    ?assertMatch({ok, static_one_for_one_sup},
-                 ides_static:find_process_by_name("static_one_for_one_sup", Tree)).
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    ?assertMatch(
+        {ok, static_one_for_one_sup},
+        ides_static:find_process_by_name("static_one_for_one_sup", Tree)
+    ).
 
 find_process_by_name_not_found_test() ->
     Beams = support_beams(),
-    {ok, #{tree := Tree}} = ides_static:supervisor_tree(Beams),
-    ?assertMatch({error, not_found},
-                 ides_static:find_process_by_name("nonexistent", Tree)).
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    ?assertMatch(
+        {error, not_found},
+        ides_static:find_process_by_name("nonexistent", Tree)
+    ).
+
+parent_field_test() ->
+    Beams = support_beams(),
+    {ok, #{tree := Trees}} = ides_static:supervisor_tree(Beams),
+    RootSup = hd([T || T <- Trees, maps:get(module, T) =:= static_one_for_one_sup]),
+    ?assertEqual(undefined, maps:get(parent, RootSup)),
+    Child = hd([C || C <- maps:get(children, RootSup), maps:get(module, C) =:= static_worker]),
+    ?assertEqual(static_one_for_one_sup, maps:get(parent, Child)).
+
+find_process_by_name_with_t_test() ->
+    Beams = support_beams(),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    ?assertMatch(
+        {ok, static_one_for_one_sup},
+        ides_static:find_process_by_name("static_one_for_one_sup", Tree)
+    ).
 
 %% --- Demo app integration tests ---
 
@@ -145,30 +172,34 @@ demo_db_pool_simple_one_for_one_test() ->
 
 demo_kill_graph_test() ->
     Beams = demo_app_beams(),
-    {ok, Killers} = ides_static:kill_graph(demo_auth, Beams),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    {ok, Killers} = ides_static:kill_graph(demo_auth, Tree),
     ?assert(lists:member(demo_sup, Killers)),
     ?assert(lists:member(demo_web_sup, Killers)),
     ?assert(lists:member(demo_handler_sup, Killers)).
 
 demo_ancestors_test() ->
     Beams = demo_app_beams(),
-    {ok, Ancestors} = ides_static:ancestors(demo_auth, Beams),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    {ok, Ancestors} = ides_static:ancestors(demo_auth, Tree),
     ?assertEqual([demo_sup, demo_web_sup, demo_handler_sup], Ancestors).
 
 demo_ancestors_leaf_test() ->
     Beams = demo_app_beams(),
-    {ok, Ancestors} = ides_static:ancestors(demo_cache, Beams),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    {ok, Ancestors} = ides_static:ancestors(demo_cache, Tree),
     ?assertEqual([demo_sup], Ancestors).
 
 demo_intensity_info_test() ->
     Beams = demo_app_beams(),
-    {ok, Intensity} = ides_static:intensity_info(demo_db_pool, Beams),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    {ok, Intensity} = ides_static:intensity_info(demo_db_pool, Tree),
     ?assertEqual(5, maps:get(max_restarts, Intensity)),
     ?assertEqual(5, maps:get(max_period, Intensity)).
 
 demo_format_test() ->
     Beams = demo_app_beams(),
-    {ok, #{tree := Tree}} = ides_static:supervisor_tree(Beams),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
     Output = lists:flatten(ides_static:format(demo_auth, Tree)),
     ?assert(string:str(Output, "demo_sup") > 0),
     ?assert(string:str(Output, "demo_web_sup") > 0),
