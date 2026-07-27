@@ -1,0 +1,43 @@
+amends "package://github.com/jdx/hk/releases/download/v1.53.0/hk@1.53.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.53.0/hk@1.53.0#/Builtins.pkl"
+
+local linters = new Mapping<String, Step> {
+    ["rebar3-compile"] {
+      glob = List("**.*{erl,hrl}", "rebar.config")
+      check = "rebar3 xref {{ files }}"
+    }
+    ["rebar3-test"] {
+      glob = List("**.*{erl,hrl}", "rebar.config")
+      check = "rebar3 do eunit, ct"
+    }
+    ["rebar3-fmt"] {
+      glob = List("**/*.{erl,hrl}", "rebar.config")
+      check = "rebar3 fmt --check"
+      fix = "rebar3 fmt"
+    }
+    // Add linters here. Examples:
+    // ["prettier"] = Builtins.prettier
+    // ["eslint"] = Builtins.eslint
+    // ["ruff"] = Builtins.ruff
+
+    // Or define custom steps:
+    // ["custom"] {
+    //     glob = "**/*.py"
+    //     check = "mypy {{ files }}"
+    // }
+}
+
+hooks {
+    ["pre-commit"] {
+        fix = true
+        stash = "git"
+        steps = linters
+    }
+    ["fix"] {
+        fix = true
+        steps = linters
+    }
+    ["check"] {
+        steps = linters
+    }
+}
