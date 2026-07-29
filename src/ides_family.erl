@@ -67,22 +67,22 @@ supervisor, `restart_type` is present.
 
 -doc "Link relationship info for a process.".
 -type link_info() :: #{
-    links := [pid()],
+    links := [pid() | port()],
     traps_exits := boolean()
 }.
 
 -doc "Monitor relationship info for a process.".
 -type monitor_info() :: #{
-    monitors := [pid()],
-    monitored_by := [pid()]
+    monitors := [pid() | port() | {atom(), atom()}],
+    monitored_by := [pid() | port() | erlang:nif_resource()]
 }.
 
 -doc "Tagged source of a kill: which process and by what mechanism.".
 -type kill_source() ::
     {ancestor, pid()}
     | {sibling, pid()}
-    | {link, pid()}
-    | {monitor, pid()}.
+    | {link, pid() | port()}
+    | {monitor, pid() | port() | {atom(), atom()}}.
 
 -doc "Restart intensity information for a supervisor.".
 -type intensity_info() :: #{
@@ -109,7 +109,7 @@ supervisor, `restart_type` is present.
     id := term(),
     pid := pid() | undefined,
     restart_type := child_restart_type(),
-    shutdown := timeout(),
+    shutdown := brutal_kill | timeout(),
     phase := running | restarting | undefined,
     counts_against_intensity := boolean()
 }.
@@ -183,9 +183,7 @@ is_supervisor_ancestor(Pid) when is_pid(Pid) ->
             end;
         _ ->
             false
-    end;
-is_supervisor_ancestor(_) ->
-    false.
+    end.
 
 -spec get_ancestors(Pid :: pid()) -> {ok, [term()]} | {error, term()}.
 get_ancestors(Pid) ->
@@ -203,15 +201,8 @@ get_ancestors(Pid) ->
             {error, no_dictionary}
     end.
 
--spec walk_down(RootPid :: pid() | atom(), TargetPid :: pid()) -> {ok, process()} | {error, term()}.
-walk_down(RootPid, TargetPid) when is_atom(RootPid) ->
-    case whereis(RootPid) of
-        undefined ->
-            {error, {process_not_alive, RootPid}};
-        Pid when is_pid(Pid) ->
-            walk_down(Pid, TargetPid)
-    end;
-walk_down(RootPid, TargetPid) ->
+-spec walk_down(RootPid :: pid(), TargetPid :: pid()) -> {ok, process()} | {error, term()}.
+walk_down(RootPid, TargetPid) when is_pid(RootPid) ->
     case erlang:process_info(RootPid, [status]) of
         undefined ->
             {error, {process_not_alive, RootPid}};
@@ -283,9 +274,7 @@ get_name(Pid) ->
                             pid_to_list(Pid)
                     end;
                 {M, F, A} ->
-                    format_mfa(M, F, A);
-                _Other ->
-                    pid_to_list(Pid)
+                    format_mfa(M, F, A)
             end
     end.
 
