@@ -18,7 +18,7 @@
 is_supervisor(#{attributes := Attrs}) ->
     lists:any(
         fun
-            ({behaviour, Behaviours}) ->
+            ({behaviour, Behaviours}) when is_list(Behaviours) ->
                 lists:member(supervisor, Behaviours);
             (_) ->
                 false
@@ -27,16 +27,19 @@ is_supervisor(#{attributes := Attrs}) ->
     ).
 
 -doc "Load BEAM files and return metadata indexed by module name.".
--spec load_beams([file:filename()]) -> {ok, #{module() => beam_info()}}.
+-spec load_beams([file:filename()]) -> {ok, #{atom() => beam_info()}}.
 load_beams(Paths) ->
-    Results = lists:foldl(fun load_beam/2, #{}, Paths),
+    Results = maps:from_list(
+        [{Module, Info} || Path <- Paths, {ok, Module, Info} <- [load_beam(Path)]]
+    ),
     {ok, Results}.
 
-load_beam(Path, Acc) ->
+-spec load_beam(file:filename()) -> {ok, module(), beam_info()} | error.
+load_beam(Path) ->
     case beam_lib:chunks(Path, [attributes, exports, abstract_code, debug_info]) of
         {ok, {Module, Chunks}} ->
-            Attrs = proplists:get_value(attributes, Chunks, []),
-            Exports = proplists:get_value(exports, Chunks, []),
+            Attrs = get_attributes(Chunks),
+            Exports = get_exports(Chunks),
             Info = #{
                 module => Module,
                 attributes => Attrs,
@@ -47,9 +50,23 @@ load_beam(Path, Acc) ->
                     {ok, Code} -> Info#{abstract_code => Code};
                     error -> Info
                 end,
-            Acc#{Module => Info2};
+            {ok, Module, Info2};
         _ ->
-            Acc
+            error
+    end.
+
+-spec get_attributes([tuple()]) -> [{atom(), [term()]}].
+get_attributes(Chunks) ->
+    case lists:keyfind(attributes, 1, Chunks) of
+        {attributes, Attrs} when is_list(Attrs) -> Attrs;
+        _ -> []
+    end.
+
+-spec get_exports([tuple()]) -> [{atom(), arity()}].
+get_exports(Chunks) ->
+    case lists:keyfind(exports, 1, Chunks) of
+        {exports, Exports} when is_list(Exports) -> Exports;
+        _ -> []
     end.
 
 extract_abstract_code(Chunks) ->

@@ -27,7 +27,7 @@ cascade restarts under the parent supervisor's strategy:
 - `rest_for_one`: siblings at positions before the target are
   killers
 """.
--spec kill_graph(TargetPid :: pid()) -> {ok, [pid()]} | {error, term()}.
+-spec kill_graph(TargetPid :: pid()) -> {ok, [pid() | port() | {atom(), atom()}]} | {error, term()}.
 kill_graph(TargetPid) ->
     case ides_family:get_ancestors(TargetPid) of
         {ok, Ancestors} when Ancestors =/= [] ->
@@ -37,13 +37,13 @@ kill_graph(TargetPid) ->
                     KillerSiblings = killer_siblings(Info),
                     LinkKillers = link_killers(TargetPid),
                     MonitorKillers = monitor_killers(TargetPid),
-                    {ok,
-                        lists:usort(
-                            AncestorPids ++
-                                KillerSiblings ++
-                                LinkKillers ++
-                                MonitorKillers
-                        )};
+                    Pids = sets:from_list(
+                        AncestorPids ++
+                            KillerSiblings ++
+                            LinkKillers ++
+                            MonitorKillers
+                    ),
+                    {ok, sets:to_list(Pids)};
                 {error, Reason} ->
                     {error, Reason}
             end;
@@ -191,7 +191,7 @@ intensity_info(SupPid) ->
                         max_restarts => Intensity,
                         max_period => Period,
                         current_count => Count,
-                        remaining => max(0, Intensity - Count)
+                        remaining => num_max(0, Intensity - Count)
                     }};
                 _ ->
                     {ok, #{max_restarts => 1, max_period => 5}}
@@ -242,7 +242,7 @@ build_children(SupPid, ChildPids) ->
     [build_child_init_info(SupPid, Id, Pid, RawChildren) || {Id, Pid} <- ChildPids].
 
 -spec build_child_init_info(
-    SupPid :: pid(), Id :: term(), Pid :: pid(), RawChildren :: [term()]
+    SupPid :: pid(), Id :: term(), Pid :: pid(), RawChildren :: [tuple()]
 ) -> ides_family:child_init_info().
 build_child_init_info(SupPid, Id, Pid, RawChildren) ->
     RestartType = ides_family:get_restart_type(SupPid, Id),
@@ -263,7 +263,7 @@ build_child_init_info(SupPid, Id, Pid, RawChildren) ->
         counts_against_intensity => Counts
     }.
 
--spec get_shutdown(SupPid :: pid(), Id :: term()) -> timeout().
+-spec get_shutdown(SupPid :: pid(), Id :: term()) -> brutal_kill | timeout().
 get_shutdown(SupPid, Id) ->
     case supervisor:get_childspec(SupPid, Id) of
         {ok, #{shutdown := Shutdown}} -> Shutdown;
@@ -325,7 +325,7 @@ affected_siblings_rule(#{
 }) ->
     pids(child_sublist(Children, Pos, 1)).
 
--spec link_killers(Pid :: pid()) -> [pid()].
+-spec link_killers(Pid :: pid()) -> [pid() | port()].
 link_killers(Pid) ->
     case link_info(Pid) of
         {ok, #{traps_exits := true}} ->
@@ -336,7 +336,7 @@ link_killers(Pid) ->
             []
     end.
 
--spec monitor_killers(Pid :: pid()) -> [pid()].
+-spec monitor_killers(Pid :: pid()) -> [pid() | port() | {atom(), atom()}].
 monitor_killers(Pid) ->
     case monitor_info(Pid) of
         {ok, #{monitors := Monitors}} ->
@@ -370,3 +370,7 @@ child_prefix([H | T], N) -> [H | child_prefix(T, N - 1)].
 child_suffix(Children, 0) -> Children;
 child_suffix([], _) -> [];
 child_suffix([_ | T], N) -> child_suffix(T, N - 1).
+
+-spec num_max(number(), number()) -> number().
+num_max(A, B) when is_number(A), is_number(B), A >= B -> A;
+num_max(A, B) when is_number(A), is_number(B), B > A -> B.

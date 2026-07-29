@@ -15,6 +15,10 @@ local linters = new Mapping<String, Step> {
       check = "rebar3 fmt --check"
       fix = "rebar3 fmt"
     }
+    ["elp-eqwalize"] {
+      glob = List("**/*.erl")
+      check = "elp eqwalize-all"
+    }
     // Add linters here. Examples:
     // ["prettier"] = Builtins.prettier
     // ["eslint"] = Builtins.eslint

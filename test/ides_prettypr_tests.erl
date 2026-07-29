@@ -54,7 +54,12 @@ format_nested_matches_printer_test() ->
                 restart_type => permanent,
                 children => [
                     #{name => "worker_1", pid => p1(), type => worker, restart_type => permanent},
-                    #{name => "worker_2", pid => TargetPid, type => worker, restart_type => permanent}
+                    #{
+                        name => "worker_2",
+                        pid => TargetPid,
+                        type => worker,
+                        restart_type => permanent
+                    }
                 ]
             }
         ]

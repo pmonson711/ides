@@ -72,7 +72,7 @@ format(TargetPid, Tree) ->
 print(TargetPid, Tree) ->
     ides_printer:print(TargetPid, Tree).
 
--spec kill_graph(TargetPid :: pid()) -> {ok, [pid()]} | {error, term()}.
+-spec kill_graph(TargetPid :: pid()) -> {ok, [pid() | port() | {atom(), atom()}]} | {error, term()}.
 kill_graph(TargetPid) ->
     ides_march:kill_graph(TargetPid).
 

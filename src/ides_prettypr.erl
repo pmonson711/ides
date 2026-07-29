@@ -26,7 +26,7 @@ print(TargetPid, Tree) ->
 %% --- Internal ---
 
 -spec format_node(TargetPid :: pid(), Node :: ides_family:process(), Depth :: non_neg_integer()) ->
-    term().
+    prettypr:document().
 format_node(
     TargetPid,
     #{
@@ -66,7 +66,7 @@ format_node(
 ) ->
     Prefix = line_prefix(TargetPid, Pid, Depth),
     Anno = [" (", atom_to_list(RestartType), ")"],
-    prettypr:text(Prefix ++ Name ++ Anno).
+    prettypr:text(binary_to_list(iolist_to_binary([Prefix, Name, Anno]))).
 
 -spec format_supervisor_line(
     TargetPid :: pid(),
@@ -75,13 +75,13 @@ format_node(
     Depth :: non_neg_integer(),
     Strategy :: atom(),
     RestartType :: atom()
-) -> term().
+) -> prettypr:document().
 format_supervisor_line(TargetPid, Pid, Name, Depth, Strategy, RestartType) ->
     Prefix = line_prefix(TargetPid, Pid, Depth),
     Anno = [
         " (", atom_to_list(Strategy), ", ", atom_to_list(RestartType), intensity_suffix(Pid), ")"
     ],
-    prettypr:text(Prefix ++ Name ++ Anno).
+    prettypr:text(binary_to_list(iolist_to_binary([Prefix, Name, Anno]))).
 
 -spec format_supervisor_line(
     TargetPid :: pid(),
@@ -89,23 +89,23 @@ format_supervisor_line(TargetPid, Pid, Name, Depth, Strategy, RestartType) ->
     Name :: string(),
     Depth :: non_neg_integer(),
     Strategy :: atom()
-) -> term().
+) -> prettypr:document().
 format_supervisor_line(TargetPid, Pid, Name, Depth, Strategy) ->
     Prefix = line_prefix(TargetPid, Pid, Depth),
     Anno = [" (", atom_to_list(Strategy), intensity_suffix(Pid), ")"],
-    prettypr:text(Prefix ++ Name ++ Anno).
+    prettypr:text(binary_to_list(iolist_to_binary([Prefix, Name, Anno]))).
 
 -spec format_children(
     TargetPid :: pid(),
-    Line :: term(),
+    Line :: prettypr:document(),
     Children :: [ides_family:process()],
     Depth :: non_neg_integer()
-) -> term().
+) -> prettypr:document().
 format_children(_TargetPid, Line, [], _Depth) ->
     Line;
-format_children(TargetPid, Line, Children, Depth) ->
-    ChildDocs = [format_node(TargetPid, Child, Depth + 1) || Child <- Children],
-    lists:foldl(fun(C, Acc) -> prettypr:above(Acc, C) end, Line, ChildDocs).
+format_children(TargetPid, Line, [Child | Rest], Depth) ->
+    ChildDoc = format_node(TargetPid, Child, Depth + 1),
+    format_children(TargetPid, prettypr:above(Line, ChildDoc), Rest, Depth).
 
 -spec line_prefix(TargetPid :: pid(), Pid :: pid(), Depth :: non_neg_integer()) -> string().
 line_prefix(_TargetPid, _Pid, 0) ->
@@ -129,7 +129,5 @@ intensity_suffix(Pid) ->
         {ok, #{max_restarts := MaxR, max_period := MaxT, current_count := Count}} ->
             io_lib:format(", ~p/~p in ~ps", [Count, MaxR, MaxT]);
         {ok, #{max_restarts := MaxR, max_period := MaxT}} ->
-            io_lib:format(", max ~p/~ps", [MaxR, MaxT]);
-        _ ->
-            []
+            io_lib:format(", max ~p/~ps", [MaxR, MaxT])
     end.

@@ -120,7 +120,7 @@ collect_modules(_) ->
 
 build_children(ChildSpecs, BeamMap, ParentModule) ->
     lists:foldl(
-        fun(Child, {KidsAcc, WarnAcc}) ->
+        fun(Child, {KidsAcc, WarnAcc}) when is_list(KidsAcc), is_list(WarnAcc) ->
             {Kid, Warns} = build_child(Child, BeamMap, ParentModule),
             {KidsAcc ++ [Kid], WarnAcc ++ Warns}
         end,
@@ -132,8 +132,8 @@ build_child(Child, BeamMap, ParentModule) ->
     {M, _F, _A} = maps:get(start, Child),
     case maps:get(type, Child) of
         supervisor ->
-            case maps:find(M, BeamMap) of
-                {ok, Info} ->
+            case BeamMap of
+                #{M := Info} ->
                     case ides_static_parse:parse_init(Info) of
                         {ok, SupFlags, ChildSpecs} ->
                             {Children, ChildWarnings} = build_children(ChildSpecs, BeamMap, M),
@@ -164,7 +164,7 @@ build_child(Child, BeamMap, ParentModule) ->
                                 []
                             }
                     end;
-                error ->
+                #{} ->
                     {
                         #{
                             name => atom_to_list(maps:get(id, Child)),
@@ -178,9 +178,9 @@ build_child(Child, BeamMap, ParentModule) ->
             end;
         worker ->
             Warns =
-                case maps:find(M, BeamMap) of
-                    {ok, _} -> [];
-                    error -> [{unresolvable_module, M}]
+                case BeamMap of
+                    #{M := _} -> [];
+                    #{} -> [{unresolvable_module, M}]
                 end,
             {
                 #{
@@ -256,15 +256,15 @@ killer_siblings_for(one_for_all, Module, Children) ->
     child_modules_except(Module, Children);
 killer_siblings_for(rest_for_one, Module, Children) ->
     {Before, _} = lists:splitwith(
-        fun(C) -> maps:get(module, C) =/= Module end,
+        fun(#{module := M}) -> M =/= Module end,
         Children
     ),
-    [maps:get(module, C) || C <- Before];
+    [M || #{module := M} <- Before];
 killer_siblings_for(_, _Module, _Children) ->
     [].
 
 has_child(Module, Children) ->
-    lists:any(fun(C) -> maps:get(module, C) =:= Module end, Children).
+    lists:any(fun(#{module := M}) -> M =:= Module end, Children).
 
 child_modules_except(Module, Children) ->
     [maps:get(module, C) || C <- Children, maps:get(module, C) =/= Module].
@@ -324,9 +324,11 @@ format_node(
 ) ->
     Name = maps:get(name, Node, atom_to_list(maps:get(module, Node))),
     Anno =
-        case maps:find(restart_type, Node) of
-            {ok, Restart} -> [" (", atom_to_list(Strategy), ", ", atom_to_list(Restart), ")"];
-            error -> [" (", atom_to_list(Strategy), ")"]
+        case Node of
+            #{restart := Restart} ->
+                [" (", atom_to_list(Strategy), ", ", atom_to_list(Restart), ")"];
+            #{} ->
+                [" (", atom_to_list(Strategy), ")"]
         end,
     Prefix = format_prefix(Module, Node, Depth),
     [

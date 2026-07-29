@@ -116,9 +116,7 @@ intensity_suffix(Pid) ->
         {ok, #{max_restarts := MaxR, max_period := MaxT, current_count := Count}} ->
             io_lib:format(", ~p/~p in ~ps", [Count, MaxR, MaxT]);
         {ok, #{max_restarts := MaxR, max_period := MaxT}} ->
-            io_lib:format(", max ~p/~ps", [MaxR, MaxT]);
-        _ ->
-            []
+            io_lib:format(", max ~p/~ps", [MaxR, MaxT])
     end.
 
 -doc """
@@ -165,6 +163,8 @@ format_init_analysis(#{
     SupLine = format_sup_header(SupPid, Strategy, Intensity),
     ChildrenLines = [format_child_info(C, TargetPid) || C <- Children],
     Footer = format_budget_footer(Budget, WorstCase),
+    % elp:ignore W0074
+    % eqwalizer:ignore
     [
         SupLine,
         io_lib:format("Total children: ~p~n", [Total]),
@@ -272,9 +272,11 @@ format_kill_sources(Sources) ->
         format_kill_group("  monitors ", Monitors)
     ].
 
--spec format_kill_group(Label :: string(), Pids :: [pid()]) -> iolist().
+-spec format_kill_group(Label :: string(), Pids :: [pid() | port() | {atom(), atom()}]) -> iolist().
 format_kill_group(_Label, []) ->
     [];
 format_kill_group(Label, Pids) ->
     PidStrs = [io_lib:format("~p", [P]) || P <- lists:sort(Pids)],
+    % elp:ignore W0074
+    % eqwalizer:ignore
     [Label, ": ", string:join(PidStrs, ", "), "\n"].
