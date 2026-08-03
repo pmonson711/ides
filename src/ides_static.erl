@@ -9,7 +9,8 @@
     format/2,
     format_tree/1,
     print/2,
-    find_process_by_name/2
+    find_process_by_name/2,
+    find_by_target/2
 ]).
 
 -export_type([
@@ -370,6 +371,16 @@ print(Module, Trees) ->
 
 find_process_by_name(Name, #{tree := Trees}) ->
     find_by_name(Name, Trees).
+
+-doc "Resolve a target string to a module, matching a module name or child-spec id.".
+-spec find_by_target(string(), t()) -> {ok, module()} | {error, not_found}.
+
+find_by_target(Target, #{tree := Trees} = T) ->
+    Mod = list_to_atom(Target),
+    case find_node(Mod, Trees) of
+        {ok, _} -> {ok, Mod};
+        error -> find_process_by_name(Target, T)
+    end.
 
 find_by_name(Name, [#{name := Name, module := Mod} | _]) ->
     {ok, Mod};

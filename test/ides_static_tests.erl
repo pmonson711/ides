@@ -121,6 +121,23 @@ find_process_by_name_with_t_test() ->
         ides_static:find_process_by_name("static_one_for_one_sup", Tree)
     ).
 
+find_by_target_module_test() ->
+    Beams = support_beams(),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    ?assertMatch(
+        {ok, static_one_for_one_sup}, ides_static:find_by_target("static_one_for_one_sup", Tree)
+    ).
+
+find_by_target_id_test() ->
+    Beams = support_beams(),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    ?assertMatch({ok, static_worker}, ides_static:find_by_target("worker_a", Tree)).
+
+find_by_target_not_found_test() ->
+    Beams = support_beams(),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    ?assertMatch({error, not_found}, ides_static:find_by_target("nope", Tree)).
+
 %% --- Demo app integration tests ---
 
 demo_app_beams() ->
