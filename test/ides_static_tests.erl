@@ -69,6 +69,14 @@ format_test() ->
     Output = lists:flatten(ides_static:format(static_worker, Tree)),
     ?assert(string:str(Output, "static_one_for_one_sup") > 0).
 
+format_tree_test() ->
+    Beams = support_beams(),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    Output = lists:flatten(ides_static:format_tree(Tree)),
+    ?assert(string:str(Output, "static_one_for_one_sup") > 0),
+    ?assert(string:str(Output, "worker_a") > 0),
+    ?assertEqual(0, string:str(Output, "* ")).
+
 not_a_supervisor_error_test() ->
     Beams = support_beams(),
     {ok, Tree} = ides_static:supervisor_tree(Beams),

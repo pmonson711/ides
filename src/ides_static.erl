@@ -7,6 +7,7 @@
     siblings/2,
     intensity_info/2,
     format/2,
+    format_tree/1,
     print/2,
     find_process_by_name/2
 ]).
@@ -317,6 +318,12 @@ siblings(Module, #{tree := Trees}) ->
 format(Module, #{tree := Trees}) ->
     [format_node(Module, T, 0) || T <- Trees].
 
+-doc "Render all root supervision trees as indented ASCII, with no target marker.".
+-spec format_tree(t()) -> iolist().
+
+format_tree(#{tree := Trees}) ->
+    [format_node(undefined, T, 0) || T <- Trees].
+
 format_node(
     Module,
     #{type := supervisor, strategy := Strategy, children := Children} = Node,
@@ -345,6 +352,8 @@ format_node(Module, #{type := worker, restart_type := Restart} = Node, Depth) ->
 
 format_prefix(_Module, _Node, 0) ->
     "";
+format_prefix(undefined, _Node, Depth) ->
+    lists:duplicate(Depth * 4 - 2, $\s) ++ "  ";
 format_prefix(Module, #{module := Module}, Depth) ->
     lists:duplicate(Depth * 4 - 2, $\s) ++ "* ";
 format_prefix(_Module, _Node, Depth) ->
