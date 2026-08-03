@@ -69,6 +69,14 @@ format_test() ->
     Output = lists:flatten(ides_static:format(static_worker, Tree)),
     ?assert(string:str(Output, "static_one_for_one_sup") > 0).
 
+format_tree_test() ->
+    Beams = support_beams(),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    Output = lists:flatten(ides_static:format_tree(Tree)),
+    ?assert(string:str(Output, "static_one_for_one_sup") > 0),
+    ?assert(string:str(Output, "worker_a") > 0),
+    ?assertEqual(0, string:str(Output, "* ")).
+
 not_a_supervisor_error_test() ->
     Beams = support_beams(),
     {ok, Tree} = ides_static:supervisor_tree(Beams),
@@ -112,6 +120,23 @@ find_process_by_name_with_t_test() ->
         {ok, static_one_for_one_sup},
         ides_static:find_process_by_name("static_one_for_one_sup", Tree)
     ).
+
+find_by_target_module_test() ->
+    Beams = support_beams(),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    ?assertMatch(
+        {ok, static_one_for_one_sup}, ides_static:find_by_target("static_one_for_one_sup", Tree)
+    ).
+
+find_by_target_id_test() ->
+    Beams = support_beams(),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    ?assertMatch({ok, static_worker}, ides_static:find_by_target("worker_a", Tree)).
+
+find_by_target_not_found_test() ->
+    Beams = support_beams(),
+    {ok, Tree} = ides_static:supervisor_tree(Beams),
+    ?assertMatch({error, not_found}, ides_static:find_by_target("nope", Tree)).
 
 %% --- Demo app integration tests ---
 

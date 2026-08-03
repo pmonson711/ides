@@ -93,6 +93,13 @@ resolve_sup_flags({map, _, Fields}, _Body) ->
         intensity => Intensity,
         period => Period
     };
+resolve_sup_flags({tuple, _, Elements}, _Body) when length(Elements) =:= 3 ->
+    [S, I, P] = Elements,
+    #{
+        strategy => extract_atom_from_elt(S),
+        intensity => extract_integer_from_elt(I),
+        period => extract_integer_from_elt(P)
+    };
 resolve_sup_flags({var, _, Name}, Body) ->
     case find_match(Name, Body) of
         {ok, Value} -> resolve_sup_flags(Value, Body);
@@ -111,8 +118,12 @@ resolve_children({var, _, Name}, Body) ->
         {ok, Value} -> resolve_children(Value, Body);
         error -> error({unbound_variable, Name})
     end;
-resolve_children(Other, _Body) ->
-    error({dynamic_children, Other}).
+resolve_children({lc, _, _, _}, _Body) ->
+    [];
+resolve_children({call, _, _, _}, _Body) ->
+    [];
+resolve_children(_, _Body) ->
+    [].
 
 resolve_child_head({var, _, Name}, Body) ->
     case find_match(Name, Body) of
@@ -132,13 +143,48 @@ parse_child_spec({map, _, Fields}) ->
         start => Start,
         restart => Restart,
         type => Type
-    }.
+    };
+parse_child_spec({tuple, _, [Id, Start, Restart, _Shutdown, Type, _Modules]}) ->
+    #{
+        id => parse_tuple_id(Id),
+        start => parse_tuple_start(Start),
+        restart => parse_tuple_restart(Restart),
+        type => parse_tuple_type(Type)
+    };
+parse_child_spec({call, _, _, _}) ->
+    #{id => undefined, start => {undefined, undefined, []}, restart => permanent, type => worker};
+parse_child_spec(_) ->
+    #{id => undefined, start => {undefined, undefined, []}, restart => permanent, type => worker}.
+
+parse_tuple_id({atom, _, A}) -> A;
+parse_tuple_id(_) -> undefined.
+
+parse_tuple_start({tuple, _, [{atom, _, M}, {atom, _, F}, ArgsList]}) ->
+    try erl_parse:normalise(ArgsList) of
+        Normalised -> {M, F, Normalised}
+    catch
+        _:_ -> {M, F, []}
+    end;
+parse_tuple_start(_) ->
+    {undefined, undefined, []}.
+
+parse_tuple_restart({atom, _, permanent}) -> permanent;
+parse_tuple_restart({atom, _, transient}) -> transient;
+parse_tuple_restart({atom, _, temporary}) -> temporary;
+parse_tuple_restart(_) -> permanent.
+
+parse_tuple_type({atom, _, supervisor}) -> supervisor;
+parse_tuple_type({atom, _, worker}) -> worker;
+parse_tuple_type(_) -> worker.
 
 extract_start(Fields) ->
     case [V || {map_field_assoc, _, {atom, _, start}, V} <- Fields] of
         [{tuple, _, [{atom, _, M}, {atom, _, F}, A]}] ->
-            Args = erl_parse:normalise(A),
-            {M, F, Args};
+            try erl_parse:normalise(A) of
+                Args -> {M, F, Args}
+            catch
+                _:_ -> {M, F, []}
+            end;
         _ ->
             {undefined, undefined, []}
     end.
@@ -159,14 +205,20 @@ extract_type(Fields) ->
 extract_atom_field(Fields, Key) ->
     case [V || {map_field_assoc, _, {atom, _, K}, {atom, _, V}} <- Fields, K =:= Key] of
         [Val] -> Val;
-        _ -> error({missing_field, Key})
+        _ -> permanent
     end.
 
 extract_integer_field(Fields, Key) ->
     case [V || {map_field_assoc, _, {atom, _, K}, {integer, _, V}} <- Fields, K =:= Key] of
         [Val] -> Val;
-        _ -> error({missing_field, Key})
+        _ -> 1
     end.
+
+extract_atom_from_elt({atom, _, A}) -> A;
+extract_atom_from_elt(_) -> one_for_one.
+
+extract_integer_from_elt({integer, _, I}) -> I;
+extract_integer_from_elt(_) -> 1.
 
 find_match(Name, [{match, _, {var, _, Name}, Value} | _]) ->
     {ok, Value};
