@@ -4,22 +4,25 @@ java = "latest"
 "github:WhatsApp/erlang-language-platform" = "latest"
 rebar = "latest"
 hk = "latest"
+git-cliff = "latest"
 
 [tasks.all]
+alias = "ready"
 depends = ["build", "test", "lint"]
 
 [tasks.build]
-run = "rebar3 xref"
+run = "rebar3 compile"
 
 [tasks.test]
-depends = ["test:unit", "test:example"]
+depends = ["build", "test:unit", "test:example"]
 
 [tasks.model]
 dir = "spec/tla/"
 run = "make"
 
 [tasks.lint]
-run = "rebar3 lint"
+run = "rebar3 do xref, lint"
+wait_for = ["build"]
 
 [tasks."test:unit"]
 run = "rebar3 eunit"
@@ -27,3 +30,4 @@ run = "rebar3 eunit"
 [tasks."test:example"]
 dir = "examples/demo_app/"
 run = "rebar3 ct"
+wait_for = ["build", "test:unit"]
