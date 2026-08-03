@@ -93,6 +93,14 @@ resolve_sup_flags({map, _, Fields}, _Body) ->
         intensity => Intensity,
         period => Period
     };
+resolve_sup_flags(
+    {tuple, _, [{atom, _, Strategy}, {integer, _, Intensity}, {integer, _, Period}]}, _Body
+) ->
+    #{
+        strategy => Strategy,
+        intensity => Intensity,
+        period => Period
+    };
 resolve_sup_flags({var, _, Name}, Body) ->
     case find_match(Name, Body) of
         {ok, Value} -> resolve_sup_flags(Value, Body);
